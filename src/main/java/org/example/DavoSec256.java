@@ -189,4 +189,121 @@ public class DavoSec256 {
     private byte rotateLeft(byte b, int bits) {
         return (byte) ((b << bits) | ((b & 0xFF) >>> (8 - bits)));
     }
+
+    public static byte[] hexStringToByteArray(String hex) {
+        int length = hex.length();
+        byte[] data = new byte[length / 2];
+        for (int i = 0; i < length; i += 2) {
+            data[i / 2] = (byte) ((Character.digit(hex.charAt(i), 16) << 4)
+                    + Character.digit(hex.charAt(i + 1), 16));
+        }
+        return data;
+    }
+
+    // Methode zur Umwandlung eines Byte-Arrays in einen Hex-String
+    public static String byteArrayToHexString(byte[] bytes) {
+        StringBuilder hexString = new StringBuilder(2 * bytes.length);
+        for (byte b : bytes) {
+            String hex = Integer.toHexString(0xFF & b);
+            if (hex.length() == 1) {
+                hexString.append('0');
+            }
+            hexString.append(hex);
+        }
+        return hexString.toString();
+    }
+
+    public byte[] decrypt(byte[] ciphertext) {
+        if (ciphertext.length % BLOCK_SIZE != 0) {
+            throw new IllegalArgumentException("Ungültige Länge des verschlüsselten Textes.");
+        }
+
+        byte[] decryptedText = new byte[ciphertext.length];
+        byte[] block = Arrays.copyOf(iv, BLOCK_SIZE);
+
+        // Multithreading für Blockentschlüsselung
+        int numThreads = Runtime.getRuntime().availableProcessors();
+        try (ThreadPoolExecutor executor = (ThreadPoolExecutor) Executors.newFixedThreadPool(numThreads)) {
+            for (int i = 0; i < ciphertext.length; i += BLOCK_SIZE) {
+                final int index = i;
+                executor.submit(() -> {
+                    byte[] ciphertextBlock = Arrays.copyOfRange(ciphertext, index, index + BLOCK_SIZE);
+                    byte[] decryptedBlock = decryptBlock(ciphertextBlock);
+                    xorWithIV(decryptedBlock, block); // IV zurücksetzen
+                    synchronized (decryptedText) {
+                        System.arraycopy(decryptedBlock, 0, decryptedText, index, BLOCK_SIZE);
+                    }
+                });
+            }
+            executor.shutdown();
+            if (!executor.awaitTermination(1, TimeUnit.MINUTES)) {
+                throw new IllegalStateException("Entschlüsselung dauerte zu lange und wurde abgebrochen.");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Entschlüsselung wurde unterbrochen.", e);
+        }
+
+        return removePadding(decryptedText);
+    }
+
+    private byte[] decryptBlock(byte[] block) {
+        for (int round = BASE_ROUNDS - 1; round >= 0; round--) {
+            removeTimingNoise(block, round);
+            reverseMixColumns(block, round);
+            reversePermuteBytes(block, round);
+            reverseSubstituteBytes(block, round);
+            reverseAddRoundKey(block, round);
+        }
+        return block;
+    }
+
+    // Umkehrmethoden für jede Transformation
+    private void reverseAddRoundKey(byte[] block, int round) {
+        for (int i = 0; i < block.length; i++) {
+            block[i] ^= key[(i + round * 7) % key.length];
+        }
+    }
+
+    private void reverseSubstituteBytes(byte[] block, int round) {
+        int[] sBox = generateDynamicSBox(round);
+        int[] reverseSBox = new int[256];
+        for (int i = 0; i < sBox.length; i++) {
+            reverseSBox[sBox[i]] = i;
+        }
+        for (int i = 0; i < block.length; i++) {
+            block[i] = (byte) reverseSBox[block[i] & 0xFF];
+        }
+    }
+
+    private void reversePermuteBytes(byte[] block, int round) {
+        int prime = 37 + (round * 23);
+        for (int i = block.length - 1; i >= 0; i--) {
+            int swapIndex = (i * prime + customRandom(round) + block[i % block.length]) % block.length;
+            byte temp = block[i];
+            block[i] = block[swapIndex];
+            block[swapIndex] = temp;
+        }
+    }
+
+    private void reverseMixColumns(byte[] block, int round) {
+        for (int i = 0; i < 4; i++) {
+            int a = block[i], b = block[i + 4], c = block[i + 8], d = block[i + 12];
+            block[i] = (byte) ((a ^ (b * 2) ^ (c * 3) ^ d) & 0xFF);
+            block[i + 4] = (byte) (((a * 2) ^ b ^ (c * 3) ^ (d * 2)) & 0xFF);
+            block[i + 8] = (byte) (((a * 3) ^ (b * 2) ^ c ^ (d * 2)) & 0xFF);
+            block[i + 12] = (byte) (((a * 2) ^ (b * 3) ^ (c * 2) ^ d) & 0xFF);
+        }
+    }
+
+    private void removeTimingNoise(byte[] block, int round) {
+        // Dummy-Methode zum Entfernen des Timing-Schutzes
+    }
+
+    private byte[] removePadding(byte[] data) {
+        int paddingLength = data[data.length - 1];
+        return Arrays.copyOf(data, data.length - paddingLength);
+    }
+
+
 }

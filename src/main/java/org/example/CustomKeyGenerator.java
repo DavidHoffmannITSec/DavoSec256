@@ -86,25 +86,41 @@ public class CustomKeyGenerator {
 
         for (int round = 0; round < ROUNDS; round++) {
             for (int i = 0; i < key.length; i++) {
-                key[i] ^= (byte) ((key[(i + 5) % key.length] * 17 + dynamicSalt[i % dynamicSalt.length] * (round + 1)) & 0xFF);
+                // Berechnung des Index und Vermeidung negativer Indizes
+                try {
+                    int memoryIndex = Math.abs((i * 17 + round) % MEMORY_SIZE);
+                    int alternateIndex = Math.abs((i * 31 + round) % MEMORY_SIZE);
+
+                    // Debugging-Ausgaben zur Diagnose
+                    System.out.println("Round: " + round + ", i: " + i + ", memoryIndex: " + memoryIndex + ", alternateIndex: " + alternateIndex);
+
+                    memoryArray[memoryIndex] ^= key[i];
+                    key[i] ^= memoryArray[alternateIndex];
+                    dynamicSalt[i % dynamicSalt.length] ^= key[i];
+
+                    // Zusätzliche zufällige Zugriffe, auch hier Absicherung gegen negative Indizes
+                    int randomIndex = Math.abs(customRandom(round + i) % MEMORY_SIZE);
+                    memoryArray[randomIndex] ^= key[i];
+
+                    int extraRandomIndex = Math.abs((memoryIndex + customRandom(i) % 64) % MEMORY_SIZE);
+                    memoryArray[extraRandomIndex] ^= key[i];
+                } catch (ArrayIndexOutOfBoundsException e) {
+                    System.err.println("ArrayIndexOutOfBoundsException: Round: " + round + ", i: " + i);
+                    e.printStackTrace();
+                    throw e; // Weiterleiten der Exception für vollständige Diagnose
+                }
+
                 key[i] = rotateLeft(key[i], (i + round) % 8);
                 key[i] ^= hashByte(seedBytes[i % seedBytes.length], i + round);
-
-                int memoryIndex = (i * 17 + round) % MEMORY_SIZE;
-                memoryArray[memoryIndex] ^= key[i];
-                key[i] ^= memoryArray[(i * 31 + round) % MEMORY_SIZE];
-                dynamicSalt[i % dynamicSalt.length] ^= key[i];
-
-                memoryArray[(customRandom(round + i) & (MEMORY_SIZE - 1))] ^= key[i];
-                // Zufällige zusätzliche Zugriffe zur Verwirrung
-                memoryArray[(memoryIndex + customRandom(i) % 64) % MEMORY_SIZE] ^= key[i];
             }
+
             shuffleBytes(key, round);
             addDynamicNOPs(round);
             delay();
         }
         return key;
     }
+
 
     private void delay() {
         try {
@@ -139,14 +155,16 @@ public class CustomKeyGenerator {
 
     // Zyklische Permutation mit variierendem Sprungindex
     private void shuffleBytes(byte[] array, int round) {
-        int jump = customRandom(round) % array.length;
+        int jump = Math.abs(customRandom(round) % array.length); // Absicherung gegen negative Sprungwerte
         for (int i = 0; i < array.length; i++) {
-            int swapIndex = (i + jump) % array.length;
+            // Berechnung des swapIndex und Sicherstellen, dass der Index positiv ist
+            int swapIndex = ((i + jump) % array.length + array.length) % array.length;
             byte temp = array[i];
             array[i] = array[swapIndex];
             array[swapIndex] = temp;
         }
     }
+
 
     private byte hashByte(byte input, int modifier) {
         byte hash = (byte) (input * 37 + modifier * 19);
