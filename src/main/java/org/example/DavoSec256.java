@@ -1,14 +1,14 @@
 package org.example;
 
 import java.util.Arrays;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 public class DavoSec256 {
     private static final int KEY_SIZE = 32; // 256 bits
     private static final int BLOCK_SIZE = 16; // 128 bits
-    private static final int BASE_ROUNDS = 24;
+    private static final int BASE_ROUNDS = 24; // Default rounds
     private final byte[] key;
     private final byte[] iv;
 
@@ -43,13 +43,17 @@ public class DavoSec256 {
 
     // Verschlüsselungsmethode mit Timing-Schutz und Multithreading
     public byte[] encrypt(byte[] plaintext) {
+        if (plaintext.length == 0) {
+            throw new IllegalArgumentException("Eingabetext darf nicht leer sein.");
+        }
+
         byte[] paddedPlaintext = pad(plaintext);
         byte[] ciphertext = new byte[paddedPlaintext.length];
         byte[] block = Arrays.copyOf(iv, BLOCK_SIZE);
 
         // Multithreading für Blockverschlüsselung
         int numThreads = Runtime.getRuntime().availableProcessors();
-        try (ExecutorService executor = Executors.newFixedThreadPool(numThreads)) {
+        try (ThreadPoolExecutor executor = (ThreadPoolExecutor) Executors.newFixedThreadPool(numThreads)) {
             for (int i = 0; i < paddedPlaintext.length; i += BLOCK_SIZE) {
                 final int index = i;
                 executor.submit(() -> {
@@ -72,7 +76,6 @@ public class DavoSec256 {
 
         return ciphertext;
     }
-
 
     private byte[] encryptBlock(byte[] block) {
         for (int round = 0; round < BASE_ROUNDS; round++) {
@@ -109,7 +112,6 @@ public class DavoSec256 {
         }
     }
 
-
     // Dynamische S-Box für jede Runde, mit mehreren Durchläufen für maximale Zufälligkeit
     private void substituteBytes(byte[] block, int round) {
         int[] sBox = generateDynamicSBox(round);
@@ -123,7 +125,7 @@ public class DavoSec256 {
         int[] sBox = new int[256];
         long seed = 0x9E3779B97F4A7C15L + round;
 
-        for (int j = 0; j < 3; j++) {
+        for (int j = 0; j < 3; j++) { // Mehrere Iterationen für maximale Zufälligkeit
             for (int i = 0; i < 256; i++) {
                 seed ^= (seed << 13) ^ (seed >> 7) ^ i;
                 sBox[i] = (int) ((seed * i + 0xA5A5A5A5L ^ rotateLeft((byte) seed, i % 8)) & 0xFF);
@@ -156,7 +158,6 @@ public class DavoSec256 {
             block[i] ^= (byte) (customRandom(round + i) & 0xFF);
         }
     }
-
 
     private void addRoundKey(byte[] block, int round) {
         for (int i = 0; i < block.length; i++) {
