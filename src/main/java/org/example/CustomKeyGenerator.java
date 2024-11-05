@@ -4,9 +4,11 @@ import java.nio.charset.StandardCharsets;
 
 public class CustomKeyGenerator {
     private static final int KEY_SIZE = 32; // 256 bits
-    private static final int ROUNDS = 100; // Mehr Runden für erhöhte Sicherheit (100 - 150+)
     private static final int SALT_SIZE = 64; // 512-bit Salt
-    private static final int MEMORY_SIZE = 128 * 1024 * 1024; // 128 MB Speicher
+    // Adaptive Größe für memoryArray und ROUNDS abhängig von Systemkapazität
+    private static final int MEMORY_SIZE = Runtime.getRuntime().maxMemory() > (256 * 1024 * 1024) ? 128 * 1024 * 1024 : 64 * 1024 * 1024; // 128 MB oder 64 MB
+    private static final int ROUNDS = MEMORY_SIZE > (64 * 1024 * 1024) ? 150 : 100; // Mehr Runden bei mehr Speicher
+
     private final byte[] key;
     private final byte[] salt;
     private final String seed;
@@ -36,7 +38,9 @@ public class CustomKeyGenerator {
     private int customRandom(int seed) {
         long result = (seed * 0x5DEECE66DL) + 0xBL;
         result ^= (result << 13) ^ (result >> 17) ^ (result << 5);
-        result ^= (result << 23) ^ (result >> 19) ^ 0xA5A5A5A5A5A5L;
+        result ^= (result * 31 + 0xA5A5A5A5A5A5L);
+        result ^= (result << 23) ^ (result >> 19);
+        result = result * 6364136223846793005L + 1442695040888963407L; // Lineare Kongruenz
         return (int) result;
     }
 
