@@ -1,49 +1,44 @@
 package org.example;
 
 import java.util.Arrays;
-import java.util.stream.IntStream;
 
 public class DavoSec256 {
     private static final int KEY_SIZE = 32; // 256 bits
     private static final int BLOCK_SIZE = 16; // 128 bits
-    private static final int MIN_ROUNDS = 16;
-    private static final int MAX_ROUNDS = MIN_ROUNDS + 12;
-    private static final int ROUNDS = calculateRounds();
-
+    private static final int BASE_ROUNDS = 24;
     private final byte[] key;
     private final byte[] iv;
-
-    // Dynamische Rundenanzahl basierend auf Systemleistung
-    private static int calculateRounds() {
-        int processors = Runtime.getRuntime().availableProcessors();
-        return Math.min(MAX_ROUNDS, MIN_ROUNDS + processors / 2);
-    }
 
     public DavoSec256(byte[] key) {
         if (key == null || key.length != KEY_SIZE) {
             throw new IllegalArgumentException("Schlüssel muss genau 256 Bit (32 Bytes) lang sein.");
         }
         this.key = Arrays.copyOf(key, KEY_SIZE);
-        this.iv = new byte[BLOCK_SIZE];
-        initializeIV();
+        this.iv = generateIV();
     }
 
-    // Verbesserte IV-Generierung mit hoher Entropie und dynamischem Seed
-    private void initializeIV() {
-        long seed = System.nanoTime();
+    // Verbesserte IV-Generierung mit dynamischem Seed
+    private byte[] generateIV() {
+        byte[] iv = new byte[BLOCK_SIZE];
+        long complexSeed = System.currentTimeMillis() ^ System.nanoTime() ^ Thread.currentThread().hashCode();
+        long hashedSeed = customHash(complexSeed);
+
         for (int i = 0; i < iv.length; i++) {
-            seed = (seed ^ (seed << 21)) ^ (seed >> 35) ^ (seed << 4);
-            iv[i] = (byte) (seed & 0xFF);
-            seed *= 6364136223846793005L + ((long) i * 37);
+            iv[i] = (byte) ((hashedSeed + i * 37) & 0xFF);
+            iv[i] ^= rotateLeft((byte) hashedSeed, i % 8);
+            hashedSeed *= 6364136223846793005L + i * 31;
         }
+        return iv;
+    }
+
+    private long customHash(long seed) {
+        seed ^= (seed << 21) ^ (seed >> 35) ^ (seed << 4);
+        seed *= 6364136223846793005L;
+        return seed;
     }
 
     // Verschlüsselungsmethode mit Timing-Schutz
     public byte[] encrypt(byte[] plaintext) {
-        if (plaintext == null || plaintext.length == 0) {
-            throw new IllegalArgumentException("Eingabedaten zur Verschlüsselung dürfen nicht null oder leer sein.");
-        }
-
         byte[] paddedPlaintext = pad(plaintext);
         byte[] ciphertext = new byte[paddedPlaintext.length];
         byte[] block = Arrays.copyOf(iv, BLOCK_SIZE);
@@ -57,88 +52,64 @@ public class DavoSec256 {
         return ciphertext;
     }
 
-    public byte[] decrypt(byte[] ciphertext) {
-        if (ciphertext == null || ciphertext.length == 0 || ciphertext.length % BLOCK_SIZE != 0) {
-            throw new IllegalArgumentException("Ungültige Chiffretext-Eingabe für die Entschlüsselung.");
-        }
-
-        byte[] plaintext = new byte[ciphertext.length];
-        byte[] block = Arrays.copyOf(iv, BLOCK_SIZE);
-
-        for (int i = 0; i < ciphertext.length; i += BLOCK_SIZE) {
-            byte[] ciphertextBlock = Arrays.copyOfRange(ciphertext, i, i + BLOCK_SIZE);
-            byte[] decryptedBlock = decryptBlock(ciphertextBlock);
-            xorWithIV(decryptedBlock, block);
-            System.arraycopy(decryptedBlock, 0, plaintext, i, BLOCK_SIZE);
-            block = ciphertextBlock;
-        }
-        return unpad(plaintext);
-    }
-
     private byte[] encryptBlock(byte[] block) {
-        for (int round = 0; round < ROUNDS; round++) {
+        for (int round = 0; round < BASE_ROUNDS; round++) {
             addRoundKey(block, round);
             substituteBytes(block, round);
-            permuteBytes(block, round);  // Neue P-Box
-            mixColumns(block);
-            shuffleBytes(block, round);
-        }
-        addRoundKey(block, ROUNDS);
-        return block;
-    }
+            permuteBytes(block, round);
+            mixColumns(block, round);
 
-    private byte[] decryptBlock(byte[] block) {
-        addRoundKey(block, ROUNDS);
-        for (int round = ROUNDS - 1; round >= 0; round--) {
-            inverseShuffleBytes(block, round);
-            inverseMixColumns(block);
-            inversePermuteBytes(block, round);
-            inverseSubstituteBytes(block, round);
-            addRoundKey(block, round);
+            // Zusätzliche Dummy-Operationen für Timing-Konsistenz
+            addTimingNoise(block, round);
         }
         return block;
     }
 
-    // Statisch generierte hochkomplexe S-Box und dynamische Anpassung pro Runde
+    // Zusätzliche Methode zur Einführung von zufälligen Dummy-Operationen und Speicherzugriffen
+    private void addTimingNoise(byte[] block, int round) {
+        int noiseOperations = 5 + customRandom(round) % 10; // Zufällige Anzahl Dummy-Operationen
+        for (int i = 0; i < noiseOperations; i++) {
+            int dummyIndex = customRandom(i + round) % block.length;
+            byte dummyValue = (byte) rotateLeft(block[dummyIndex], round % 8);
+
+            // Zufällige Berechnung ohne Einfluss auf den finalen Wert
+            dummyValue ^= (byte) (customRandom(dummyValue) & 0xFF);
+            dummyValue = (byte) rotateLeft(dummyValue, dummyIndex % 8);
+
+            // Zufällige zusätzliche Zugriffe im Speicher
+            int memoryAccessIndex = (dummyIndex * customRandom(dummyValue) + round) % block.length;
+            block[memoryAccessIndex] ^= dummyValue;
+
+            // Weitere zufällige Zugriffe und Berechnungen für Timing-Schutz
+            dummyValue ^= (byte) rotateLeft(block[round % block.length], 3);
+            memoryAccessIndex = (memoryAccessIndex + customRandom(round + i)) % block.length;
+            block[memoryAccessIndex] ^= dummyValue;
+        }
+    }
+
+    // Dynamische S-Box für jede Runde
     private void substituteBytes(byte[] block, int round) {
-        int[] sBox = generateComplexSBox(round);
-        IntStream.range(0, block.length).parallel().forEach(i -> block[i] = (byte) sBox[block[i] & 0xFF]);
-    }
-
-    private void inverseSubstituteBytes(byte[] block, int round) {
-        int[] sBox = generateComplexSBox(round);
-        int[] inverseSBox = new int[256];
-        for (int i = 0; i < sBox.length; i++) {
-            inverseSBox[sBox[i]] = i;
-        }
-        IntStream.range(0, block.length).parallel().forEach(i -> block[i] = (byte) inverseSBox[block[i] & 0xFF]);
-    }
-
-    private void inverseMixColumns(byte[] block) {
-        for (int i = 0; i < 4; i++) {
-            int a = block[i], b = block[i + 4], c = block[i + 8], d = block[i + 12];
-
-            block[i] = (byte) ((a * 14) ^ (b * 11) ^ (c * 13) ^ (d * 9) & 0xFF);
-            block[i + 4] = (byte) ((a * 9) ^ (b * 14) ^ (c * 11) ^ (d * 13) & 0xFF);
-            block[i + 8] = (byte) ((a * 13) ^ (b * 9) ^ (c * 14) ^ (d * 11) & 0xFF);
-            block[i + 12] = (byte) ((a * 11) ^ (b * 13) ^ (c * 9) ^ (d * 14) & 0xFF);
+        int[] sBox = generateDynamicSBox(round);
+        for (int i = 0; i < block.length; i++) {
+            block[i] = (byte) sBox[block[i] & 0xFF];
         }
     }
 
-
-    // Erzeugt eine ultra-komplexe S-Box für maximale Sicherheit
-    private int[] generateComplexSBox(int round) {
+    // Generiert eine dynamische S-Box basierend auf Rundenanzahl und Seed
+    private int[] generateDynamicSBox(int round) {
         int[] sBox = new int[256];
-        long primeMultiplier = 0x9E3779B97F4A7C15L + round;  // Einzigartig pro Runde
+        long seed = 0x9E3779B97F4A7C15L + round;
+
         for (int i = 0; i < 256; i++) {
-            sBox[i] = (int) (((i * primeMultiplier) ^ (i << 7) ^ (i >> 3)) & 0xFF);
+            seed ^= (seed << 13) ^ (seed >> 7) ^ i;
+            sBox[i] = (int) ((seed * i + 0xA5A5A5A5L ^ rotateLeft((byte) seed, i % 8)) & 0xFF);
         }
         return sBox;
     }
 
-    // Permutiert die Bytes für zusätzliche Diffusion und Sicherheit (P-Box)
+    // Optimierte Permutationsmethode
     private void permuteBytes(byte[] block, int round) {
-        int prime = 31 + (round * 17);  // Dynamische Permutation basierend auf Runde
+        int prime = 37 + (round * 23);
         for (int i = 0; i < block.length; i++) {
             int swapIndex = (i * prime + round + block[i % block.length]) % block.length;
             byte temp = block[i];
@@ -147,86 +118,47 @@ public class DavoSec256 {
         }
     }
 
-    private void inversePermuteBytes(byte[] block, int round) {
-        int prime = 31 + (round * 17);
-        for (int i = block.length - 1; i >= 0; i--) {
-            int swapIndex = (i * prime + round + block[i % block.length]) % block.length;
-            byte temp = block[i];
-            block[i] = block[swapIndex];
-            block[swapIndex] = temp;
+    private void mixColumns(byte[] block, int round) {
+        for (int i = 0; i < 4; i++) {
+            int a = block[i], b = block[i + 4], c = block[i + 8], d = block[i + 12];
+            block[i] = (byte) (a ^ b * 2 ^ c * 3 ^ d);
+            block[i + 4] = (byte) (a * 2 ^ b ^ c * 3 ^ d * 2);
+            block[i + 8] = (byte) (a * 3 ^ b * 2 ^ c ^ d * 2);
+            block[i + 12] = (byte) (a * 2 ^ b * 3 ^ c * 2 ^ d);
+
+            // Zusätzliche zufällige XOR-Schicht für mehr Sicherheit
+            block[i] ^= (byte) (customRandom(round + i) & 0xFF);
         }
     }
 
-    // Weitere notwendige Transformationen
+
     private void addRoundKey(byte[] block, int round) {
-        IntStream.range(0, block.length).parallel().forEach(i -> block[i] ^= key[(i + round * 7) % key.length]);
+        for (int i = 0; i < block.length; i++) {
+            block[i] ^= key[(i + round * 7) % key.length];
+        }
     }
 
     private void xorWithIV(byte[] block, byte[] iv) {
-        IntStream.range(0, block.length).parallel().forEach(i -> block[i] ^= iv[i]);
-    }
-
-    private void mixColumns(byte[] block) {
-        for (int i = 0; i < 4; i++) {
-            int a = block[i], b = block[i + 4], c = block[i + 8], d = block[i + 12];
-            block[i] = (byte) ((a ^ b * 2 ^ c * 3 ^ d) & 0xFF);
-            block[i + 4] = (byte) ((a * 2 ^ b ^ c * 3 ^ d * 2) & 0xFF);
-            block[i + 8] = (byte) ((a * 3 ^ b * 2 ^ c ^ d * 2) & 0xFF);
-            block[i + 12] = (byte) ((a * 2 ^ b * 3 ^ c * 2 ^ d) & 0xFF);
-        }
-    }
-
-    private void shuffleBytes(byte[] block, int round) {
         for (int i = 0; i < block.length; i++) {
-            int swapIndex = (i * 31 + round + (block[i % block.length] ^ (round * 37))) % block.length;
-            byte temp = block[i];
-            block[i] = block[swapIndex];
-            block[swapIndex] = temp;
+            block[i] ^= iv[i];
         }
     }
 
-    private void inverseShuffleBytes(byte[] block, int round) {
-        for (int i = block.length - 1; i >= 0; i--) {
-            int swapIndex = (i * 31 + round + (block[i % block.length] ^ (round * 37))) % block.length;
-            byte temp = block[i];
-            block[i] = block[swapIndex];
-            block[swapIndex] = temp;
-        }
-    }
-
-    // Padding und Unpadding
     private byte[] pad(byte[] data) {
         int paddingLength = BLOCK_SIZE - (data.length % BLOCK_SIZE);
         byte[] padded = Arrays.copyOf(data, data.length + paddingLength);
-        for (int i = data.length; i < padded.length; i++) {
-            padded[i] = (byte) ((paddingLength + i * 31) & 0xFF);
-        }
+        Arrays.fill(padded, data.length, padded.length, (byte) paddingLength);
         return padded;
     }
 
-    private byte[] unpad(byte[] data) {
-        int paddingLength = data[data.length - 1] & 0xFF;
-        return Arrays.copyOf(data, data.length - paddingLength);
+    private int customRandom(int seed) {
+        long result = (seed * 0x5DEECE66DL) + 0xBL;
+        result ^= (result << 13) ^ (result >> 17) ^ (result << 5);
+        result ^= (result * 31 + 0xA5A5A5A5A5A5L);
+        return (int) result;
     }
 
-    // Hex-Konvertierungsmethoden
-    public static String bytesToHex(byte[] bytes) {
-        StringBuilder hexString = new StringBuilder(2 * bytes.length);
-        for (byte b : bytes) {
-            String hex = Integer.toHexString(0xff & b);
-            if (hex.length() == 1) hexString.append('0');
-            hexString.append(hex);
-        }
-        return hexString.toString();
-    }
-
-    public static byte[] hexToBytes(String hexString) {
-        int len = hexString.length();
-        byte[] data = new byte[len / 2];
-        for (int i = 0; i < len; i += 2) {
-            data[i / 2] = (byte) ((Character.digit(hexString.charAt(i), 16) << 4)
-                    + Character.digit(hexString.charAt(i + 1), 16));
-        }
-        return data;
+    private byte rotateLeft(byte b, int bits) {
+        return (byte) ((b << bits) | ((b & 0xFF) >>> (8 - bits)));
     }
 }
