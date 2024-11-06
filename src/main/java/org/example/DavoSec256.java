@@ -49,9 +49,6 @@ public class DavoSec256 {
         this.S_BOX = generateDynamicSBox(this.key, this.iv);
         this.INVERSE_S_BOX = generateInverseSBox(this.S_BOX);
         this.PERMUTATION = generateDynamicPermutation(this.key, this.iv);
-
-        testSBoxForCollisions(this.S_BOX);
-        testPermutationForCollisions(this.PERMUTATION);
     }
 
     private byte[] generateDynamicIV() {
@@ -243,27 +240,6 @@ public class DavoSec256 {
         }
     }
 
-    private void testSBoxForCollisions(byte[] sBox) {
-        boolean[] seen = new boolean[256];
-        for (byte value : sBox) {
-            int idx = value & 0xFF;
-            if (seen[idx]) {
-                throw new IllegalStateException("Kollision in der S-Box festgestellt!");
-            }
-            seen[idx] = true;
-        }
-    }
-
-    private void testPermutationForCollisions(int[] permutation) {
-        boolean[] seen = new boolean[BLOCK_SIZE];
-        for (int value : permutation) {
-            if (value < 0 || value >= BLOCK_SIZE || seen[value]) {
-                throw new IllegalStateException("Kollision in der Permutationsmatrix festgestellt!");
-            }
-            seen[value] = true;
-        }
-    }
-
     private byte[] generateDynamicSBox(byte[] key, byte[] iv) {
         byte[] sBox = new byte[256];
         boolean[] used = new boolean[256];
@@ -330,5 +306,32 @@ public class DavoSec256 {
         }
         return sb.toString();
     }
+
+
+    public byte[] getS_BOX()
+    {
+        return S_BOX;
+    }
+
+    public byte[] getIv()
+    {
+        return iv;
+    }
+
+    public byte[] getKey()
+    {
+        return key;
+    }
+
+    public byte[] getINVERSE_S_BOX()
+    {
+        return INVERSE_S_BOX;
+    }
+
+    public int[] getPERMUTATION()
+    {
+        return PERMUTATION;
+    }
+
 
 }

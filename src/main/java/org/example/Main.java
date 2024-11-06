@@ -7,8 +7,8 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 
 public class Main {
-    private static final String keyPath = "C:/Users/hoffmann/Documents/keyAndIV.dat"; // Speicherort für Schlüssel und IV
-    private static final String filePath = "C:/Users/hoffmann/Documents/generated.pdf"; // Pfad zur unverschlüsselten Datei
+    private static final String keyPath = "C:/Users/PC/Documents/keyAndIV.dat"; // Speicherort für Schlüssel und IV
+    private static final String filePath = "C:/Users/PC/Documents/hashtest.txt"; // Pfad zur unverschlüsselten Datei
     private static final DavoSec256 davoSec256 = new DavoSec256();
 
     public static void main(String[] args) {
@@ -17,9 +17,9 @@ public class Main {
             // Schlüssel und IV laden oder generieren
             loadOrGenerateKeyAndIV();
 
-            encryptAndDecryptText();
+           // encryptAndDecryptText();
 
-            encryptFile();
+           // encryptFile();
             decryptFile();
 
 
