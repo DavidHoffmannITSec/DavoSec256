@@ -2,10 +2,8 @@ package org.example;
 
 import java.nio.charset.StandardCharsets;
 
-public class Main
-{
-    public static void main(String[] args)
-    {
+public class Main {
+    public static void main(String[] args) {
         String originalText = "Geheimer Text für die Verschlüsselung";
         System.out.println("Originaltext: " + originalText);
 
@@ -23,8 +21,8 @@ public class Main
         String encryptedHex = DavoSec256.byteArrayToHexString(encryptedBytes);
         System.out.println("Verschlüsselter Text (Hex): " + encryptedHex);
 
-        // Zurück in Bytes konvertieren und entschlüsseln (Dummy-Entschlüsselungsmethode verwenden)
-        byte[] decryptedBytes = davoSec256.decrypt(encryptedBytes); // Annahme: decrypt() Methode implementiert
+        // Zurück in Bytes konvertieren und entschlüsseln
+        byte[] decryptedBytes = davoSec256.decrypt(encryptedBytes);
         String decryptedText = new String(decryptedBytes, StandardCharsets.UTF_8);
         System.out.println("Entschlüsselter Text: " + decryptedText);
     }

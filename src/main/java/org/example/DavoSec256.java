@@ -7,7 +7,6 @@ public class DavoSec256 {
     private static final int BLOCK_SIZE = 16; // 128 bits
     private static final int DEFAULT_BASE_ROUNDS = 24; // Default rounds
     private int baseRounds; // Anzahl der Runden
-    private int reserveRounds; // Reservierte Runden
 
     private final byte[] key;
     private final byte[] iv;
@@ -17,25 +16,15 @@ public class DavoSec256 {
         this.key = keyGenerator.getKey(); // Dynamisch generierter Schlüssel
         this.iv = generateDynamicIV(); // Dynamisch generierter Initialisierungsvektor
         this.baseRounds = DEFAULT_BASE_ROUNDS; // Setze die Basisrunden auf den Standardwert
-        this.reserveRounds = 5; // Beispiel für reservierte Runden (kann angepasst werden)
     }
 
-    // Methode zur Generierung eines dynamischen und komplexeren IVs
     private byte[] generateDynamicIV() {
         byte[] iv = new byte[BLOCK_SIZE];
-        long seed = System.currentTimeMillis() ^ System.nanoTime() ^ Thread.currentThread().hashCode();
-
-        for (int i = 0; i < iv.length; i++) {
-            seed ^= (seed << 13) ^ (seed >> 7) ^ i;
-            iv[i] = (byte) ((seed & 0xFF) ^ (rotateLeft((byte) seed, i % 8) & 0xFF));
-            seed = (seed * 6364136223846793005L + 1442695040888963407L) ^ (seed >> 17);
+        // Zufällige IV-Generierung
+        for (int i = 0; i < BLOCK_SIZE; i++) {
+            iv[i] = (byte) (Math.random() * 256);
         }
         return iv;
-    }
-
-    // Linksdrehung zur Transformation von Bits
-    private byte rotateLeft(byte b, int bits) {
-        return (byte) ((b << bits) | ((b & 0xFF) >>> (8 - bits)));
     }
 
     public static String byteArrayToHexString(byte[] bytes) {
@@ -50,7 +39,6 @@ public class DavoSec256 {
         return hexString.toString();
     }
 
-    // Verschlüsselungsmethode mit dynamischem IV
     public byte[] encrypt(byte[] plaintext) {
         if (plaintext.length == 0) {
             throw new IllegalArgumentException("Eingabetext darf nicht leer sein.");
@@ -71,7 +59,6 @@ public class DavoSec256 {
         return ciphertext;
     }
 
-    // Entschlüsselungsmethode mit dynamischem IV
     public byte[] decrypt(byte[] ciphertext) {
         if (ciphertext.length % BLOCK_SIZE != 0) {
             throw new IllegalArgumentException("Ungültige Länge des verschlüsselten Textes.");
@@ -113,13 +100,12 @@ public class DavoSec256 {
         return Arrays.copyOf(data, data.length - paddingLength);
     }
 
-    // Beispielhafte Implementierung der Transformationen
     private byte[] encryptBlock(byte[] block) {
         byte[] workingBlock = Arrays.copyOf(block, block.length);
         for (int round = 0; round < baseRounds; round++) {
             addRoundKey(workingBlock, round);
             substituteBytes(workingBlock, round);
-            permuteBytes(workingBlock, round); // Dynamische Permutation
+            permuteBytes(workingBlock, round);
             mixColumns(workingBlock, round);
         }
         return workingBlock;
@@ -127,92 +113,136 @@ public class DavoSec256 {
 
     private byte[] decryptBlock(byte[] block) {
         byte[] workingBlock = Arrays.copyOf(block, block.length);
-        for (int round = baseRounds - 1; round >= 0; round--) { // Verwende hier baseRounds
+        for (int round = baseRounds - 1; round >= 0; round--) {
             reverseMixColumns(workingBlock, round);
-            reversePermuteBytes(workingBlock, round); // Umgekehrte dynamische Permutation
+            reversePermuteBytes(workingBlock, round);
             reverseSubstituteBytes(workingBlock, round);
             reverseAddRoundKey(workingBlock, round);
         }
         return workingBlock;
     }
 
-    // Methoden zur Blocktransformation
     private void addRoundKey(byte[] block, int round) {
         for (int i = 0; i < BLOCK_SIZE; i++) {
-            block[i] ^= key[i % key.length]; // XOR mit dem Schlüssel
+            block[i] ^= key[i % key.length];
         }
     }
 
     private void reverseAddRoundKey(byte[] block, int round) {
         for (int i = 0; i < BLOCK_SIZE; i++) {
-            block[i] ^= key[i % key.length]; // XOR mit dem Schlüssel (bei der Rücktransformation dasselbe)
+            block[i] ^= key[i % key.length];
         }
     }
 
-    // Dynamische S-Box
     private byte[] generateDynamicSBox(int round) {
         byte[] sBox = new byte[256];
         for (int i = 0; i < 256; i++) {
-            sBox[i] = (byte) ((i + round) % 256); // Einfache dynamische S-Box
+            sBox[i] = (byte) ((i + round) % 256);
         }
         return sBox;
     }
 
-    // Implementierung von substituteBytes
     private void substituteBytes(byte[] block, int round) {
-        byte[] sBox = generateDynamicSBox(round); // Dynamisch generierte S-Box
+        byte[] sBox = generateDynamicSBox(round);
         for (int i = 0; i < block.length; i++) {
-            block[i] = sBox[block[i] & 0xFF]; // Anwenden der S-Box
+            block[i] = sBox[block[i] & 0xFF];
         }
     }
 
     private void reverseSubstituteBytes(byte[] block, int round) {
-        byte[] sBox = generateDynamicSBox(round); // Dynamisch generierte S-Box
+        byte[] sBox = generateDynamicSBox(round);
         byte[] inverseSBox = new byte[256];
         for (int i = 0; i < 256; i++) {
-            inverseSBox[sBox[i] & 0xFF] = (byte) i; // Erzeuge die inverse S-Box
+            inverseSBox[sBox[i] & 0xFF] = (byte) i;
         }
         for (int i = 0; i < block.length; i++) {
-            block[i] = inverseSBox[block[i] & 0xFF]; // Anwenden der inversen S-Box
+            block[i] = inverseSBox[block[i] & 0xFF];
         }
     }
 
-    // Implementierung von permuteBytes
     private void permuteBytes(byte[] block, int round) {
-        // Dynamische Permutation basierend auf der aktuellen Runde
         byte[] permuted = new byte[BLOCK_SIZE];
-        int[] permutation = generateDynamicPermutation(round); // Dynamische Permutation generieren
-
+        int[] permutation = generateDynamicPermutation(round);
         for (int i = 0; i < BLOCK_SIZE; i++) {
             permuted[i] = block[permutation[i]];
         }
         System.arraycopy(permuted, 0, block, 0, BLOCK_SIZE);
     }
 
-    // Dynamische Permutationsmethode
     private int[] generateDynamicPermutation(int round) {
         int[] permutation = new int[BLOCK_SIZE];
         for (int i = 0; i < BLOCK_SIZE; i++) {
-            permutation[i] = (i + round) % BLOCK_SIZE; // Einfache Permutation basierend auf der Runde
+            permutation[i] = (i + round * 3) % BLOCK_SIZE; // Dynamische Permutation basierend auf der Runde
         }
         return permutation;
     }
 
-    // Implementierung von reversePermuteBytes
     private void reversePermuteBytes(byte[] block, int round) {
-        // Umkehrung der dynamischen Permutation
         byte[] reversed = new byte[BLOCK_SIZE];
-        int[] reversePermutation = generateDynamicPermutation(round); // Verwende dieselbe Permutation zur Umkehr
-
+        int[] reversePermutation = generateDynamicPermutation(round);
         for (int i = 0; i < BLOCK_SIZE; i++) {
-            reversed[reversePermutation[i]] = block[i]; // Umkehren der Permutation
+            reversed[reversePermutation[i]] = block[i];
         }
         System.arraycopy(reversed, 0, block, 0, BLOCK_SIZE);
     }
 
-    // Methoden für die Blocktransformationen
-    private void mixColumns(byte[] block, int round) { /* Implementierung */ }
-    private void reverseMixColumns(byte[] block, int round) { /* Implementierung */ }
+    private void mixColumns(byte[] block, int round) {
+        // Matrixmultiplikation in GF(2^8)
+        byte[][] matrix = {
+                {2, 3, 1, 1},
+                {1, 2, 3, 1},
+                {1, 1, 2, 3},
+                {3, 1, 1, 2}
+        };
+
+        byte[] mixed = new byte[BLOCK_SIZE];
+        for (int i = 0; i < BLOCK_SIZE; i += 4) {
+            for (int j = 0; j < 4; j++) {
+                mixed[i + j] = 0;
+                for (int k = 0; k < 4; k++) {
+                    mixed[i + j] ^= galoisMultiply(block[i + k], matrix[j][k]);
+                }
+            }
+        }
+        System.arraycopy(mixed, 0, block, 0, BLOCK_SIZE);
+    }
+
+    private byte galoisMultiply(byte a, byte b) {
+        int product = 0;
+        for (int i = 0; i < 8; i++) {
+            if ((b & 1) != 0) {
+                product ^= a;
+            }
+            boolean highBitSet = (a & 0x80) != 0;
+            a <<= 1;
+            if (highBitSet) {
+                a ^= 0x1b; // Reduziere Modulo x^8 + x^4 + x^3 + x + 1
+            }
+            b >>= 1;
+        }
+        return (byte) product;
+    }
+
+    private void reverseMixColumns(byte[] block, int round) {
+        // Umkehrmatrix in GF(2^8)
+        byte[][] invMatrix = {
+                {14, 11, 13, 9},
+                {9, 14, 11, 13},
+                {13, 9, 14, 11},
+                {11, 13, 9, 14}
+        };
+
+        byte[] reversed = new byte[BLOCK_SIZE];
+        for (int i = 0; i < BLOCK_SIZE; i += 4) {
+            for (int j = 0; j < 4; j++) {
+                reversed[i + j] = 0;
+                for (int k = 0; k < 4; k++) {
+                    reversed[i + j] ^= galoisMultiply(block[i + k], invMatrix[j][k]);
+                }
+            }
+        }
+        System.arraycopy(reversed, 0, block, 0, BLOCK_SIZE);
+    }
 
     private void xorWithIV(byte[] block, byte[] iv) {
         for (int i = 0; i < block.length; i++) {
@@ -220,27 +250,8 @@ public class DavoSec256 {
         }
     }
 
-    // Methode zur Anzeige des Schlüssels und IVs in Hex-Format
     public void displayKeyAndIV() {
         System.out.println("Schlüssel (Hex): " + byteArrayToHexString(key));
         System.out.println("IV (Hex): " + byteArrayToHexString(iv));
-    }
-
-    // Getter für baseRounds und reserveRounds
-    public int getBaseRounds() {
-        return baseRounds;
-    }
-
-    public int getReserveRounds() {
-        return reserveRounds;
-    }
-
-    // Setter für baseRounds und reserveRounds
-    public void setBaseRounds(int baseRounds) {
-        this.baseRounds = baseRounds;
-    }
-
-    public void setReserveRounds(int reserveRounds) {
-        this.reserveRounds = reserveRounds;
     }
 }
