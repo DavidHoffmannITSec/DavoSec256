@@ -1,25 +1,26 @@
 package org.example;
 
-import java.nio.charset.StandardCharsets;
 
 public class Main {
     public static void main(String[] args) {
-        String originalText = "Geheimer Text für die Verschlüsselung";
-        System.out.println("Originaltext: " + originalText);
 
-        // Initialisiere die Verschlüsselungsklasse mit dem generierten Schlüssel
         DavoSec256 davoSec256 = new DavoSec256();
 
-        // Text in Bytes umwandeln und verschlüsseln
-        byte[] plaintextBytes = originalText.getBytes(StandardCharsets.UTF_8);
-        byte[] encryptedBytes = davoSec256.encrypt(plaintextBytes);
-        String encryptedHex = DavoSec256.byteArrayToHexString(encryptedBytes);
-        System.out.println("Verschlüsselter Text (Hex): " + encryptedHex);
+        // Generiere den Schlüssel
+        davoSec256.generateKey();
 
-        // Zurück in Bytes konvertieren und entschlüsseln
-        byte[] decryptedBytes = davoSec256.decrypt(encryptedBytes);
-        String decryptedText = new String(decryptedBytes, StandardCharsets.UTF_8);
-        System.out.println("Entschlüsselter Text: " + decryptedText);
+        // Ursprünglicher Text für die Verschlüsselung
+        String originalText = "Geheimer Text für die Verschlüsselung xD";
+        byte[] plaintext = originalText.getBytes();
+
+        // Verschlüsseln des Textes
+        byte[] ciphertext = davoSec256.encrypt(plaintext);
+        System.out.println("Verschlüsselter Text: " + DavoSec256.byteArrayToHexString(ciphertext));
+
+        // Entschlüsseln des Textes
+        byte[] decryptedText = davoSec256.decrypt(ciphertext);
+        String decryptedString = new String(decryptedText);
+        System.out.println("Entschlüsselter Text: " + decryptedString);
     }
 
 }

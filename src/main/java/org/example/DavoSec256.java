@@ -2,24 +2,22 @@ package org.example;
 
 import java.util.Arrays;
 import java.util.Random;
+import java.util.stream.IntStream;
 
 public class DavoSec256 {
     private static final int KEY_SIZE = 32; // 256 bits
     private static final int BLOCK_SIZE = 16; // 128 bits
-    private static final int DEFAULT_BASE_ROUNDS = 24; // Default rounds
-    private final int baseRounds;
+    private int baseRounds;
 
-    private final byte[] key;
-    private final byte[] iv;
+    private byte[] key; // Schlüssel wird hier nicht sofort erstellt
+    private byte[] iv;
 
-    // Dynamische S-Box und inverse S-Box
-    private final byte[] S_BOX;
-    private final byte[] INVERSE_S_BOX;
+    private byte[] S_BOX;
+    private byte[] INVERSE_S_BOX;
+    private int[] PERMUTATION;
 
-    // Dynamische Permutation
-    private final int[] PERMUTATION;
+    CustomKeyGenerator ckg;
 
-    // MixColumns Matrizen
     private static final byte[][] MIX_COLUMNS_MATRIX = {
             {2, 3, 1, 1},
             {1, 2, 3, 1},
@@ -34,24 +32,19 @@ public class DavoSec256 {
             {11, 13, 9, 14}
     };
 
-    // Lookup-Tabelle für Galois-Feld-Multiplikation
-    private static final byte[][] GALOIS_FIELD = new byte[256][256];
-
-    static {
-        for (int i = 0; i < 256; i++) {
-            for (int j = 0; j < 256; j++) {
-                GALOIS_FIELD[i][j] = galoisMultiply((byte) i, (byte) j);
-            }
-        }
+    public DavoSec256() {
+        this.ckg = new CustomKeyGenerator();
     }
 
-    public DavoSec256() {
-        CustomKeyGenerator keyGenerator = new CustomKeyGenerator();
-        this.key = keyGenerator.getKey(); // Dynamisch generierter Schlüssel
-        this.iv = generateDynamicIV(); // Dynamisch generierter Initialisierungsvektor
-        this.baseRounds = DEFAULT_BASE_ROUNDS + new Random().nextInt(5); // Dynamische Rundenzahl
+    public DavoSec256(int delay) {
+        this.ckg = new CustomKeyGenerator(delay);
+    }
 
-        // Dynamische Generierung der S-Box und Permutation basierend auf Schlüssel und IV
+    public void generateKey() {
+        this.key = ckg.getKey();
+        this.iv = generateDynamicIV();
+        int dataLength = this.key.length; // Automatische Berechnung der Datenlänge
+        this.baseRounds = 18 + (key.length % 5) + (dataLength / BLOCK_SIZE);
         this.S_BOX = generateDynamicSBox(this.key, this.iv);
         this.INVERSE_S_BOX = generateInverseSBox(this.S_BOX);
         this.PERMUTATION = generateDynamicPermutation(this.key, this.iv);
@@ -81,12 +74,10 @@ public class DavoSec256 {
         boolean[] used = new boolean[256];
         Random random = new Random(Arrays.hashCode(key) ^ Arrays.hashCode(iv));
 
-        // Initiale Werte setzen
         for (int i = 0; i < 256; i++) {
             sBox[i] = (byte) i;
         }
 
-        // Nichtlineare Transformation basierend auf Schlüssel und IV
         for (int i = 0; i < 256; i++) {
             int j = Math.abs(i * i + 11 + key[i % key.length]) % 256;
             byte temp = sBox[i];
@@ -99,7 +90,6 @@ public class DavoSec256 {
             sBox[i] = (byte) ((sBox[i] * 197) ^ (sBox[i] >>> 5) ^ (sBox[i] * 37));
         }
 
-        // Sicherstellen, dass alle Werte von 0 bis 255 abgedeckt sind
         for (int i = 0; i < 256; i++) {
             int newValue;
             do {
@@ -124,12 +114,10 @@ public class DavoSec256 {
         int[] permutation = new int[BLOCK_SIZE];
         Random random = new Random(Arrays.hashCode(key) ^ Arrays.hashCode(iv));
 
-        // Permutation basierend auf dem Schlüssel und IV
         for (int i = 0; i < BLOCK_SIZE; i++) {
             permutation[i] = i;
         }
 
-        // Permutation durchmischt
         for (int i = BLOCK_SIZE - 1; i > 0; i--) {
             int j = random.nextInt(i + 1);
             int temp = permutation[i];
@@ -188,15 +176,15 @@ public class DavoSec256 {
 
     private byte[] removePadding(byte[] data) {
         int paddingLength = data[data.length - 1] & 0xFF;
-        boolean paddingIsValid = paddingLength >= 1 && paddingLength <= BLOCK_SIZE;
 
-        // Konstante Zeitsensitivität für Padding-Check
-        for (int i = data.length - paddingLength; i < data.length; i++) {
-            paddingIsValid &= (data[i] == (byte) paddingLength);
+        if (paddingLength < 1 || paddingLength > BLOCK_SIZE) {
+            throw new IllegalArgumentException("Ungültiges Padding: Padding-Length außerhalb der gültigen Grenzen");
         }
 
-        if (!paddingIsValid) {
-            throw new IllegalArgumentException("Ungültiges Padding: inkonsistentes Padding");
+        for (int i = data.length - paddingLength; i < data.length; i++) {
+            if (data[i] != (byte) paddingLength) {
+                throw new IllegalArgumentException("Ungültiges Padding: inkonsistentes Padding");
+            }
         }
 
         return Arrays.copyOf(data, data.length - paddingLength);
@@ -225,14 +213,7 @@ public class DavoSec256 {
     }
 
     private void addRoundKey(byte[] block, int round) {
-        for (int i = 0; i < BLOCK_SIZE; i++) {
-            block[i] ^= key[(i + round) % KEY_SIZE];
-        }
-
-        // Dummy-Zugriff zur Vermeidung von Timing-Angriffen
-        for (int i = 0; i < BLOCK_SIZE; i++) {
-            int dummy = key[(i + round + 7) % KEY_SIZE];
-        }
+        IntStream.range(0, BLOCK_SIZE).parallel().forEach(i -> block[i] ^= key[(i + round) % KEY_SIZE]);
     }
 
     private void reverseAddRoundKey(byte[] block, int round) {
@@ -243,18 +224,12 @@ public class DavoSec256 {
         for (int i = 0; i < block.length; i++) {
             block[i] = S_BOX[block[i] & 0xFF];
         }
-
-        // Dummy-Lesezugriff zur Vermeidung von Timing-Angriffen
-        int dummy = S_BOX[new Random().nextInt(S_BOX.length)];
     }
 
     private void reverseSubstituteBytes(byte[] block) {
         for (int i = 0; i < block.length; i++) {
             block[i] = INVERSE_S_BOX[block[i] & 0xFF];
         }
-
-        // Dummy-Lesezugriff zur Vermeidung von Timing-Angriffen
-        int dummy = INVERSE_S_BOX[new Random().nextInt(INVERSE_S_BOX.length)];
     }
 
     private void permuteBytes(byte[] block) {
@@ -262,10 +237,6 @@ public class DavoSec256 {
         for (int i = 0; i < BLOCK_SIZE; i++) {
             permuted[i] = block[PERMUTATION[i]];
         }
-
-        // Dummy-Lesezugriff zur Vermeidung von Timing-Angriffen
-        int dummy = PERMUTATION[new Random().nextInt(PERMUTATION.length)];
-
         System.arraycopy(permuted, 0, block, 0, BLOCK_SIZE);
     }
 
@@ -291,7 +262,7 @@ public class DavoSec256 {
             for (int j = 0; j < 4; j++) {
                 mixed[i + j] = 0;
                 for (int k = 0; k < 4; k++) {
-                    mixed[i + j] ^= GALOIS_FIELD[block[i + k] & 0xFF][matrix[j][k] & 0xFF];
+                    mixed[i + j] ^= galoisMultiply(block[i + k], matrix[j][k]);
                 }
             }
         }
@@ -317,6 +288,7 @@ public class DavoSec256 {
     private void xorWithIV(byte[] block, byte[] iv) {
         for (int i = 0; i < block.length; i++) {
             block[i] ^= iv[i];
+            iv[i] = (byte) ((iv[i] + block[i]) % 256); // Dynamische Anpassung des IV
         }
     }
 }

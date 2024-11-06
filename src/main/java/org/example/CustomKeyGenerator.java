@@ -85,8 +85,7 @@ public class CustomKeyGenerator {
                 key[i] ^= sBox[i % sBox.length];
                 key = applyPBox(key); // Wendet die P-Box nur einmal an
 
-                int memoryIndex = Math.abs((i * 17 + round) % MEMORY_SIZE);
-                int alternateIndex = Math.abs((i * 31 + round) % MEMORY_SIZE);
+                // memoryIndex und alternateIndex wurden entfernt, da sie ungenutzt sind.
 
                 key[i] = rotateLeft(key[i], (i + round) % 8);
                 key[i] ^= hashByte(seedBytes[i % seedBytes.length], i + round);
@@ -109,7 +108,6 @@ public class CustomKeyGenerator {
         return sBox;
     }
 
-    // Key Derivation Function-basiertes Seed für höhere Entropie
     private int KDFBasedSeed() {
         long timeSeed = System.nanoTime();
         long entropySeed = timeSeed ^ (timeSeed << 13) ^ (timeSeed >> 7);
@@ -133,21 +131,20 @@ public class CustomKeyGenerator {
     private int customRandom(int seed) {
         long result = (seed * 0x5DEECE66DL) + 0xBL;
 
-        // Mehrere nichtlineare Transformationen für zusätzliche Komplexität
         result ^= (result << 13) ^ (result >> 21) ^ (result << 5);
         result += (result * 31) ^ 0x9E3779B97F4A7C15L; // Verwendet eine große, kryptografisch inspirierte Konstante
         result ^= (result << 27) ^ (result >> 19) ^ 0xA5A5A5A5A5A5L; // Füge eine weitere Permutation hinzu
 
-        // XOR mit einer rotierenden Bitmaske
         result ^= Long.rotateLeft(result, (seed % 64));
         result *= 6364136223846793005L; // Multiplikation mit einer weiteren Primzahl zur Streuung
 
-        // Begrenze das Ergebnis auf 32-Bit-Ganzzahlbereich und zusätzliche Permutation
         return (int) ((result ^ (result >>> 15)) & 0xFFFFFFFFL);
     }
 
-
     private byte rotateLeft(byte b, int bits) {
+        if (bits < 0 || bits > 7) {
+            throw new IllegalArgumentException("Bits must be between 0 and 7");
+        }
         return (byte) ((b << bits) | ((b & 0xFF) >>> (8 - bits)));
     }
 
@@ -198,6 +195,9 @@ public class CustomKeyGenerator {
     }
 
     private byte rotateRight(byte b, int bits) {
+        if (bits < 0 || bits > 7) {
+            throw new IllegalArgumentException("Bits must be between 0 and 7");
+        }
         return (byte) ((b >>> bits) | ((b & 0xFF) << (8 - bits)));
     }
 }
