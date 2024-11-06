@@ -8,25 +8,20 @@ import java.nio.file.Paths;
 
 public class Main {
     private static final String keyPath = "C:/Users/hoffmann/Documents/keyAndIV.dat"; // Speicherort für Schlüssel und IV
-    private static final String filePath = "C:/Users/hoffmann/Documents/test.txt"; // Pfad zur unverschlüsselten Datei
+    private static final String filePath = "C:/Users/hoffmann/Documents/generated.pdf"; // Pfad zur unverschlüsselten Datei
     private static final DavoSec256 davoSec256 = new DavoSec256();
 
     public static void main(String[] args) {
-        boolean isEncrypting = false; // true = Verschlüsseln || false = Entschlüsseln
 
         try {
             // Schlüssel und IV laden oder generieren
             loadOrGenerateKeyAndIV();
 
-           // encryptAndDecryptText();
+            encryptAndDecryptText();
 
-            if (isEncrypting) {
-                // Verschlüssele die Datei
-                encryptFile();
-            } else {
-                // Entschlüssele die Datei
-                decryptFile();
-            }
+            encryptFile();
+            decryptFile();
+
 
         } catch (IOException e) {
             System.err.println("Fehler bei der Dateioperation: " + e.getMessage());
