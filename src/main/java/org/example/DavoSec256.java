@@ -1,29 +1,51 @@
 package org.example;
 
 import java.util.Arrays;
+import java.util.Random;
 
 public class DavoSec256 {
     private static final int KEY_SIZE = 32; // 256 bits
     private static final int BLOCK_SIZE = 16; // 128 bits
     private static final int DEFAULT_BASE_ROUNDS = 24; // Default rounds
-    private int baseRounds; // Anzahl der Runden
+    private final int baseRounds;
 
     private final byte[] key;
     private final byte[] iv;
+
+    // Statische, einmal generierte S-Box und inverse S-Box
+    private static final byte[] S_BOX = generateStaticSBox();
+    private static final byte[] INVERSE_S_BOX = generateInverseSBox(S_BOX);
+
+    // Statische, einmal generierte Permutation
+    private static final int[] PERMUTATION = generateStaticPermutation();
+
+    // MixColumns Matrizen
+    private static final byte[][] MIX_COLUMNS_MATRIX = {
+            {2, 3, 1, 1},
+            {1, 2, 3, 1},
+            {1, 1, 2, 3},
+            {3, 1, 1, 2}
+    };
+
+    private static final byte[][] INV_MIX_COLUMNS_MATRIX = {
+            {14, 11, 13, 9},
+            {9, 14, 11, 13},
+            {13, 9, 14, 11},
+            {11, 13, 9, 14}
+    };
 
     public DavoSec256() {
         CustomKeyGenerator keyGenerator = new CustomKeyGenerator();
         this.key = keyGenerator.getKey(); // Dynamisch generierter Schlüssel
         this.iv = generateDynamicIV(); // Dynamisch generierter Initialisierungsvektor
-        this.baseRounds = DEFAULT_BASE_ROUNDS; // Setze die Basisrunden auf den Standardwert
+        this.baseRounds = DEFAULT_BASE_ROUNDS;
     }
 
     private byte[] generateDynamicIV() {
         byte[] iv = new byte[BLOCK_SIZE];
-        // Zufällige IV-Generierung
-        for (int i = 0; i < BLOCK_SIZE; i++) {
-            iv[i] = (byte) (Math.random() * 256);
-        }
+        long seed = System.currentTimeMillis() ^ System.nanoTime();
+        Random random = new Random(seed);
+        random.nextBytes(iv);
         return iv;
     }
 
@@ -88,15 +110,14 @@ public class DavoSec256 {
     private byte[] removePadding(byte[] data) {
         int paddingLength = data[data.length - 1] & 0xFF;
         if (paddingLength < 1 || paddingLength > BLOCK_SIZE) {
-            throw new IllegalArgumentException("Ungültiges Padding: Wert " + paddingLength + " außerhalb der erwarteten Range 1-16.");
+            throw new IllegalArgumentException("Ungültiges Padding");
         }
 
-        for (int i = 0; i < paddingLength; i++) {
-            if (data[data.length - 1 - i] != (byte) paddingLength) {
-                throw new IllegalArgumentException("Ungültiges Padding: Inkonsequentes Padding an Position " + (data.length - 1 - i));
+        for (int i = data.length - paddingLength; i < data.length; i++) {
+            if (data[i] != (byte) paddingLength) {
+                throw new IllegalArgumentException("Ungültiges Padding: inkonsistentes Padding");
             }
         }
-
         return Arrays.copyOf(data, data.length - paddingLength);
     }
 
@@ -104,9 +125,9 @@ public class DavoSec256 {
         byte[] workingBlock = Arrays.copyOf(block, block.length);
         for (int round = 0; round < baseRounds; round++) {
             addRoundKey(workingBlock, round);
-            substituteBytes(workingBlock, round);
-            permuteBytes(workingBlock, round);
-            mixColumns(workingBlock, round);
+            substituteBytes(workingBlock);
+            permuteBytes(workingBlock);
+            mixColumns(workingBlock);
         }
         return workingBlock;
     }
@@ -114,9 +135,9 @@ public class DavoSec256 {
     private byte[] decryptBlock(byte[] block) {
         byte[] workingBlock = Arrays.copyOf(block, block.length);
         for (int round = baseRounds - 1; round >= 0; round--) {
-            reverseMixColumns(workingBlock, round);
-            reversePermuteBytes(workingBlock, round);
-            reverseSubstituteBytes(workingBlock, round);
+            reverseMixColumns(workingBlock);
+            reversePermuteBytes(workingBlock);
+            reverseSubstituteBytes(workingBlock);
             reverseAddRoundKey(workingBlock, round);
         }
         return workingBlock;
@@ -129,72 +150,70 @@ public class DavoSec256 {
     }
 
     private void reverseAddRoundKey(byte[] block, int round) {
-        for (int i = 0; i < BLOCK_SIZE; i++) {
-            block[i] ^= key[i % key.length];
-        }
+        addRoundKey(block, round);
     }
 
-    private byte[] generateDynamicSBox(int round) {
+    private static byte[] generateStaticSBox() {
         byte[] sBox = new byte[256];
         for (int i = 0; i < 256; i++) {
-            sBox[i] = (byte) ((i + round) % 256);
+            sBox[i] = (byte) ((i * 13 + 7) % 256); // Beispielhafter, komplexer Algorithmus
         }
         return sBox;
     }
 
-    private void substituteBytes(byte[] block, int round) {
-        byte[] sBox = generateDynamicSBox(round);
-        for (int i = 0; i < block.length; i++) {
-            block[i] = sBox[block[i] & 0xFF];
-        }
-    }
-
-    private void reverseSubstituteBytes(byte[] block, int round) {
-        byte[] sBox = generateDynamicSBox(round);
-        byte[] inverseSBox = new byte[256];
+    private static byte[] generateInverseSBox(byte[] sBox) {
+        byte[] inverse = new byte[256];
         for (int i = 0; i < 256; i++) {
-            inverseSBox[sBox[i] & 0xFF] = (byte) i;
+            inverse[sBox[i] & 0xFF] = (byte) i;
         }
+        return inverse;
+    }
+
+    private void substituteBytes(byte[] block) {
         for (int i = 0; i < block.length; i++) {
-            block[i] = inverseSBox[block[i] & 0xFF];
+            block[i] = S_BOX[block[i] & 0xFF];
         }
     }
 
-    private void permuteBytes(byte[] block, int round) {
-        byte[] permuted = new byte[BLOCK_SIZE];
-        int[] permutation = generateDynamicPermutation(round);
-        for (int i = 0; i < BLOCK_SIZE; i++) {
-            permuted[i] = block[permutation[i]];
+    private void reverseSubstituteBytes(byte[] block) {
+        for (int i = 0; i < block.length; i++) {
+            block[i] = INVERSE_S_BOX[block[i] & 0xFF];
         }
-        System.arraycopy(permuted, 0, block, 0, BLOCK_SIZE);
     }
 
-    private int[] generateDynamicPermutation(int round) {
+    private static int[] generateStaticPermutation() {
         int[] permutation = new int[BLOCK_SIZE];
         for (int i = 0; i < BLOCK_SIZE; i++) {
-            permutation[i] = (i + round * 3) % BLOCK_SIZE; // Dynamische Permutation basierend auf der Runde
+            permutation[i] = (i * 5 + 3) % BLOCK_SIZE; // Statische, nichtlineare Permutation
         }
         return permutation;
     }
 
-    private void reversePermuteBytes(byte[] block, int round) {
-        byte[] reversed = new byte[BLOCK_SIZE];
-        int[] reversePermutation = generateDynamicPermutation(round);
+    private void permuteBytes(byte[] block) {
+        byte[] permuted = new byte[BLOCK_SIZE];
         for (int i = 0; i < BLOCK_SIZE; i++) {
-            reversed[reversePermutation[i]] = block[i];
+            permuted[i] = block[PERMUTATION[i]];
+        }
+        System.arraycopy(permuted, 0, block, 0, BLOCK_SIZE);
+    }
+
+    private void reversePermuteBytes(byte[] block) {
+        byte[] reversed = new byte[BLOCK_SIZE];
+        for (int i = 0; i < BLOCK_SIZE; i++) {
+            reversed[PERMUTATION[i]] = block[i];
         }
         System.arraycopy(reversed, 0, block, 0, BLOCK_SIZE);
     }
 
-    private void mixColumns(byte[] block, int round) {
-        // Matrixmultiplikation in GF(2^8)
-        byte[][] matrix = {
-                {2, 3, 1, 1},
-                {1, 2, 3, 1},
-                {1, 1, 2, 3},
-                {3, 1, 1, 2}
-        };
+    private void mixColumns(byte[] block) {
+        mixColumnsWithMatrix(block, MIX_COLUMNS_MATRIX);
+    }
 
+    private void reverseMixColumns(byte[] block) {
+        mixColumnsWithMatrix(block, INV_MIX_COLUMNS_MATRIX);
+    }
+
+    private void mixColumnsWithMatrix(byte[] block, byte[][] matrix) {
         byte[] mixed = new byte[BLOCK_SIZE];
         for (int i = 0; i < BLOCK_SIZE; i += 4) {
             for (int j = 0; j < 4; j++) {
@@ -216,32 +235,11 @@ public class DavoSec256 {
             boolean highBitSet = (a & 0x80) != 0;
             a <<= 1;
             if (highBitSet) {
-                a ^= 0x1b; // Reduziere Modulo x^8 + x^4 + x^3 + x + 1
+                a ^= 0x1b; // Modulo x^8 + x^4 + x^3 + x + 1
             }
             b >>= 1;
         }
         return (byte) product;
-    }
-
-    private void reverseMixColumns(byte[] block, int round) {
-        // Umkehrmatrix in GF(2^8)
-        byte[][] invMatrix = {
-                {14, 11, 13, 9},
-                {9, 14, 11, 13},
-                {13, 9, 14, 11},
-                {11, 13, 9, 14}
-        };
-
-        byte[] reversed = new byte[BLOCK_SIZE];
-        for (int i = 0; i < BLOCK_SIZE; i += 4) {
-            for (int j = 0; j < 4; j++) {
-                reversed[i + j] = 0;
-                for (int k = 0; k < 4; k++) {
-                    reversed[i + j] ^= galoisMultiply(block[i + k], invMatrix[j][k]);
-                }
-            }
-        }
-        System.arraycopy(reversed, 0, block, 0, BLOCK_SIZE);
     }
 
     private void xorWithIV(byte[] block, byte[] iv) {
