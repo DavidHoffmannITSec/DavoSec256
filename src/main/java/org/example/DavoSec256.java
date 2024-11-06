@@ -1,5 +1,9 @@
 package org.example;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.Random;
 import java.util.stream.IntStream;
@@ -289,6 +293,32 @@ public class DavoSec256 {
         for (int i = 0; i < block.length; i++) {
             block[i] ^= iv[i];
             iv[i] = (byte) ((iv[i] + block[i]) % 256); // Dynamische Anpassung des IV
+        }
+    }
+
+    public void encryptFile(File inputFile, File outputFile) throws IOException {
+        byte[] fileBytes = readFile(inputFile);
+        byte[] encryptedBytes = encrypt(fileBytes);
+        writeFile(outputFile, encryptedBytes);
+    }
+
+    public void decryptFile(File inputFile, File outputFile) throws IOException {
+        byte[] fileBytes = readFile(inputFile);
+        byte[] decryptedBytes = decrypt(fileBytes);
+        writeFile(outputFile, decryptedBytes);
+    }
+
+    private byte[] readFile(File file) throws IOException {
+        try (FileInputStream fis = new FileInputStream(file)) {
+            byte[] data = new byte[(int) file.length()];
+            fis.read(data);
+            return data;
+        }
+    }
+
+    private void writeFile(File file, byte[] data) throws IOException {
+        try (FileOutputStream fos = new FileOutputStream(file)) {
+            fos.write(data);
         }
     }
 }

@@ -1,6 +1,9 @@
 package org.example;
 
 
+import java.io.File;
+import java.io.IOException;
+
 public class Main {
     public static void main(String[] args) {
 
@@ -21,6 +24,22 @@ public class Main {
         byte[] decryptedText = davoSec256.decrypt(ciphertext);
         String decryptedString = new String(decryptedText);
         System.out.println("Entschlüsselter Text: " + decryptedString);
+
+        File inputFile = new File("C:/Users/hoffmann/Documents/test.txt");
+        File encryptedFile = new File("C:/Users/hoffmann/Documents/test_Encrypted.txt");
+        File decryptedFile = new File("C:/Users/hoffmann/Documents/test_Decrypted.txt");
+
+        try {
+            // Datei verschlüsseln
+            davoSec256.encryptFile(inputFile, encryptedFile);
+            System.out.println("Datei erfolgreich verschlüsselt: " + encryptedFile.getAbsolutePath());
+
+            // Datei entschlüsseln
+            davoSec256.decryptFile(encryptedFile, decryptedFile);
+            System.out.println("Datei erfolgreich entschlüsselt: " + decryptedFile.getAbsolutePath());
+        } catch (IOException e) {
+            System.err.println("Fehler bei der Dateioperation: " + e.getMessage());
+        }
     }
 
 }
