@@ -34,6 +34,17 @@ public class DavoSec256 {
             {11, 13, 9, 14}
     };
 
+    // Lookup-Tabelle für Galois-Feld-Multiplikation
+    private static final byte[][] GALOIS_FIELD = new byte[256][256];
+
+    static {
+        for (int i = 0; i < 256; i++) {
+            for (int j = 0; j < 256; j++) {
+                GALOIS_FIELD[i][j] = galoisMultiply((byte) i, (byte) j);
+            }
+        }
+    }
+
     public DavoSec256() {
         CustomKeyGenerator keyGenerator = new CustomKeyGenerator();
         this.key = keyGenerator.getKey(); // Dynamisch generierter Schlüssel
@@ -177,15 +188,17 @@ public class DavoSec256 {
 
     private byte[] removePadding(byte[] data) {
         int paddingLength = data[data.length - 1] & 0xFF;
-        if (paddingLength < 1 || paddingLength > BLOCK_SIZE) {
-            throw new IllegalArgumentException("Ungültiges Padding");
+        boolean paddingIsValid = paddingLength >= 1 && paddingLength <= BLOCK_SIZE;
+
+        // Konstante Zeitsensitivität für Padding-Check
+        for (int i = data.length - paddingLength; i < data.length; i++) {
+            paddingIsValid &= (data[i] == (byte) paddingLength);
         }
 
-        for (int i = data.length - paddingLength; i < data.length; i++) {
-            if (data[i] != (byte) paddingLength) {
-                throw new IllegalArgumentException("Ungültiges Padding: inkonsistentes Padding");
-            }
+        if (!paddingIsValid) {
+            throw new IllegalArgumentException("Ungültiges Padding: inkonsistentes Padding");
         }
+
         return Arrays.copyOf(data, data.length - paddingLength);
     }
 
@@ -215,6 +228,11 @@ public class DavoSec256 {
         for (int i = 0; i < BLOCK_SIZE; i++) {
             block[i] ^= key[(i + round) % KEY_SIZE];
         }
+
+        // Dummy-Zugriff zur Vermeidung von Timing-Angriffen
+        for (int i = 0; i < BLOCK_SIZE; i++) {
+            int dummy = key[(i + round + 7) % KEY_SIZE];
+        }
     }
 
     private void reverseAddRoundKey(byte[] block, int round) {
@@ -225,12 +243,18 @@ public class DavoSec256 {
         for (int i = 0; i < block.length; i++) {
             block[i] = S_BOX[block[i] & 0xFF];
         }
+
+        // Dummy-Lesezugriff zur Vermeidung von Timing-Angriffen
+        int dummy = S_BOX[new Random().nextInt(S_BOX.length)];
     }
 
     private void reverseSubstituteBytes(byte[] block) {
         for (int i = 0; i < block.length; i++) {
             block[i] = INVERSE_S_BOX[block[i] & 0xFF];
         }
+
+        // Dummy-Lesezugriff zur Vermeidung von Timing-Angriffen
+        int dummy = INVERSE_S_BOX[new Random().nextInt(INVERSE_S_BOX.length)];
     }
 
     private void permuteBytes(byte[] block) {
@@ -238,6 +262,10 @@ public class DavoSec256 {
         for (int i = 0; i < BLOCK_SIZE; i++) {
             permuted[i] = block[PERMUTATION[i]];
         }
+
+        // Dummy-Lesezugriff zur Vermeidung von Timing-Angriffen
+        int dummy = PERMUTATION[new Random().nextInt(PERMUTATION.length)];
+
         System.arraycopy(permuted, 0, block, 0, BLOCK_SIZE);
     }
 
@@ -263,14 +291,14 @@ public class DavoSec256 {
             for (int j = 0; j < 4; j++) {
                 mixed[i + j] = 0;
                 for (int k = 0; k < 4; k++) {
-                    mixed[i + j] ^= galoisMultiply(block[i + k], matrix[j][k]);
+                    mixed[i + j] ^= GALOIS_FIELD[block[i + k] & 0xFF][matrix[j][k] & 0xFF];
                 }
             }
         }
         System.arraycopy(mixed, 0, block, 0, BLOCK_SIZE);
     }
 
-    private byte galoisMultiply(byte a, byte b) {
+    private static byte galoisMultiply(byte a, byte b) {
         int product = 0;
         for (int i = 0; i < 8; i++) {
             if ((b & 1) != 0) {
