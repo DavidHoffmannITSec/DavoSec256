@@ -15,17 +15,17 @@ public class Main {
 
         try {
             // Schlüssel und IV laden oder generieren
-            loadOrGenerateKeyAndIV();
-
-           // encryptAndDecryptText();
+            //loadOrGenerateKeyAndIV();
+            davoSec256.generateKey();
+            encryptAndDecryptText();
 
            // encryptFile();
-            decryptFile();
+           //decryptFile();
 
 
-        } catch (IOException e) {
+        }/* catch (IOException e) {
             System.err.println("Fehler bei der Dateioperation: " + e.getMessage());
-        } catch (IllegalArgumentException e) {
+        }*/ catch (IllegalArgumentException e) {
             System.err.println("Fehler bei der Verschlüsselung/Entschlüsselung: " + e.getMessage());
         }
     }

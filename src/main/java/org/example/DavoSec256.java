@@ -53,10 +53,14 @@ public class DavoSec256 {
 
     private byte[] generateDynamicIV() {
         byte[] iv = new byte[BLOCK_SIZE];
-        Random random = new Random(Arrays.hashCode(key) ^ System.nanoTime() ^ Runtime.getRuntime().freeMemory());
+        long seed = Arrays.hashCode(key) ^ System.nanoTime() ^ Runtime.getRuntime().freeMemory();
+        seed ^= (seed << 21) ^ (seed >> 17) ^ System.currentTimeMillis();
+
+        Random random = new Random(seed);
         random.nextBytes(iv);
         return iv;
     }
+
 
     public void saveKeyAndIV(String filePath) throws IOException {
         try (DataOutputStream dos = new DataOutputStream(new FileOutputStream(filePath))) {

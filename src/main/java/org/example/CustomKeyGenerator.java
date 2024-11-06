@@ -44,17 +44,21 @@ public class CustomKeyGenerator {
     }
 
     private String generateComplexSeed() {
-        long seedBase = System.nanoTime() ^ System.currentTimeMillis() ^ 0xCAFEBABE1234L;
+        long timeSeed = System.nanoTime();
+        long memorySeed = Runtime.getRuntime().freeMemory();
+        long combinedSeed = timeSeed ^ memorySeed ^ System.currentTimeMillis();
         StringBuilder seedBuilder = new StringBuilder();
 
+        Random random = new Random(combinedSeed);
         for (int i = 0; i < 32; i++) {
-            seedBase ^= (seedBase << 7) ^ (seedBase >> 5) ^ i;
-            int nextChar = (int) ((seedBase & 0xFF) ^ (seedBase >> 4));
+            combinedSeed ^= (combinedSeed << 7) ^ (combinedSeed >> 5) ^ i;
+            int nextChar = (int) ((combinedSeed & 0xFF) ^ random.nextInt(256));
             seedBuilder.append((char) (nextChar & 0xFF));
-            seedBase ^= seedBuilder.charAt(i) * 37;
+            combinedSeed ^= seedBuilder.charAt(i) * 37;
         }
         return seedBuilder.toString();
     }
+
 
 
     private byte[] generateStrongSalt() {
@@ -78,7 +82,7 @@ public class CustomKeyGenerator {
         byte[] key = new byte[KEY_SIZE];
         byte[] seedBytes = seed.getBytes(StandardCharsets.UTF_8);
         byte[] dynamicSalt = salt.clone();
-        byte[] sBox = generateDynamicSBox(seedBytes.length); // Verbesserter Seed für S-Box
+        byte[] sBox = generateDynamicSBox(seedBytes.length);
 
         for (int i = 0; i < key.length; i++) {
             key[i] = (byte) ((seedBytes[i % seedBytes.length] + dynamicSalt[i % dynamicSalt.length] * 19 + i * 37) & 0xFF);
@@ -89,19 +93,22 @@ public class CustomKeyGenerator {
                 key[i] ^= sBox[i % sBox.length];
                 key = applyPBox(key); // Wendet die P-Box nur einmal an
 
-                // memoryIndex und alternateIndex wurden entfernt, da sie ungenutzt sind.
-
                 key[i] = rotateLeft(key[i], (i + round) % 8);
                 key[i] ^= hashByte(seedBytes[i % seedBytes.length], i + round);
+
+                // Randomisierte Ergänzungen zur Erhöhung der Unvorhersehbarkeit
+                if (round % 5 == 0) {
+                    shuffleBytes(key, round);
+                }
             }
 
-            shuffleBytes(key, round);
             addDynamicNOPs(round);
             simulateDelay();
         }
 
         return key;
     }
+
 
     private byte[] generateDynamicSBox(int size) {
         byte[] sBox = new byte[size];
@@ -185,21 +192,23 @@ public class CustomKeyGenerator {
 
     private int[] generateComplexPBox() {
         int[] pBox = new int[KEY_SIZE];
-        int seed = KDFBasedSeed(); // Verbesserter Seed für P-Box
-        Random random = new Random(seed);
+        long entropySeed = System.currentTimeMillis() ^ System.nanoTime() ^ (Runtime.getRuntime().freeMemory() * 31);
+        Random random = new Random(entropySeed);
 
         for (int i = 0; i < pBox.length; i++) {
             pBox[i] = i;
         }
 
-        for (int i = 0; i < pBox.length; i++) {
-            int swapIndex = random.nextInt(KEY_SIZE);
-            pBox[i] = Math.abs((pBox[i] + (swapIndex * 31) ^ rotateLeft((byte)pBox[i], 5)) % KEY_SIZE);
-            pBox[swapIndex] = Math.abs((pBox[swapIndex] + (pBox[i] * 17) ^ rotateRight((byte)pBox[swapIndex], 7)) % KEY_SIZE);
+        for (int i = pBox.length - 1; i > 0; i--) {
+            int swapIndex = random.nextInt(i + 1);
+            int temp = pBox[i];
+            pBox[i] = pBox[swapIndex];
+            pBox[swapIndex] = temp;
         }
 
         return pBox;
     }
+
 
     private byte rotateRight(byte b, int bits) {
         if (bits < 0 || bits > 7) {
