@@ -12,12 +12,12 @@ public class DavoSec256 {
     private final byte[] key;
     private final byte[] iv;
 
-    // Statische, einmal generierte S-Box und inverse S-Box
-    private static final byte[] S_BOX = generateStaticSBox();
-    private static final byte[] INVERSE_S_BOX = generateInverseSBox();
+    // Dynamische S-Box und inverse S-Box
+    private final byte[] S_BOX;
+    private final byte[] INVERSE_S_BOX;
 
-    // Statische, einmal generierte Permutation
-    private static final int[] PERMUTATION = generateStaticPermutation();
+    // Dynamische Permutation
+    private final int[] PERMUTATION;
 
     // MixColumns Matrizen
     private static final byte[][] MIX_COLUMNS_MATRIX = {
@@ -39,6 +39,11 @@ public class DavoSec256 {
         this.key = keyGenerator.getKey(); // Dynamisch generierter Schlüssel
         this.iv = generateDynamicIV(); // Dynamisch generierter Initialisierungsvektor
         this.baseRounds = DEFAULT_BASE_ROUNDS;
+
+        // Dynamische Generierung der S-Box und Permutation basierend auf Schlüssel und IV
+        this.S_BOX = generateDynamicSBox(this.key, this.iv);
+        this.INVERSE_S_BOX = generateInverseSBox(this.S_BOX);
+        this.PERMUTATION = generateDynamicPermutation(this.key, this.iv);
     }
 
     private byte[] generateDynamicIV() {
@@ -59,6 +64,71 @@ public class DavoSec256 {
             hexString.append(hex);
         }
         return hexString.toString();
+    }
+
+    private static byte[] generateDynamicSBox(byte[] key, byte[] iv) {
+        byte[] sBox = new byte[256];
+        boolean[] used = new boolean[256];
+        Random random = new Random(Arrays.hashCode(key) ^ Arrays.hashCode(iv));
+
+        // Initiale Werte setzen
+        for (int i = 0; i < 256; i++) {
+            sBox[i] = (byte) i;
+        }
+
+        // Nichtlineare Transformation basierend auf Schlüssel und IV
+        for (int i = 0; i < 256; i++) {
+            int j = Math.floorMod(i * i + 11 + key[i % key.length], 256);
+            byte temp = sBox[i];
+            sBox[i] = sBox[j];
+            sBox[j] = temp;
+        }
+
+        for (int i = 0; i < 256; i++) {
+            sBox[i] = (byte) (sBox[i] ^ (sBox[Math.floorMod(i + 1, 256)] * 31) ^ (sBox[Math.floorMod(i + 3, 256)] >> 2));
+            sBox[i] = (byte) ((sBox[i] * 197) ^ (sBox[i] >>> 5) ^ (sBox[i] * 37));
+        }
+
+        // Sicherstellen, dass alle Werte von 0 bis 255 abgedeckt sind
+        for (int i = 0; i < 256; i++) {
+            int newValue;
+            do {
+                newValue = Math.floorMod(random.nextInt(256) ^ sBox[i], 256);
+            } while (used[newValue]);
+            sBox[i] = (byte) newValue;
+            used[newValue] = true;
+        }
+
+        return sBox;
+    }
+
+
+    private static byte[] generateInverseSBox(byte[] sBox) {
+        byte[] inverseSBox = new byte[256];
+        for (int i = 0; i < 256; i++) {
+            inverseSBox[sBox[i] & 0xFF] = (byte) i;
+        }
+        return inverseSBox;
+    }
+
+    private static int[] generateDynamicPermutation(byte[] key, byte[] iv) {
+        int[] permutation = new int[BLOCK_SIZE];
+        Random random = new Random(Arrays.hashCode(key) ^ Arrays.hashCode(iv));
+
+        // Permutation basierend auf dem Schlüssel und IV
+        for (int i = 0; i < BLOCK_SIZE; i++) {
+            permutation[i] = i;
+        }
+
+        // Permutation durchmischt
+        for (int i = BLOCK_SIZE - 1; i > 0; i--) {
+            int j = random.nextInt(i + 1);
+            int temp = permutation[i];
+            permutation[i] = permutation[j];
+            permutation[j] = temp;
+        }
+
+        return permutation;
     }
 
     public byte[] encrypt(byte[] plaintext) {
@@ -153,52 +223,6 @@ public class DavoSec256 {
         addRoundKey(block, round);
     }
 
-    private static byte[] generateStaticSBox() {
-        byte[] sBox = new byte[256];
-        boolean[] used = new boolean[256];
-        Random random = new Random(0xCAFEBABEL); // Fester Seed für die Reproduzierbarkeit in der Entwicklung
-
-        // Initiale Werte setzen
-        for (int i = 0; i < 256; i++) {
-            sBox[i] = (byte) i;
-        }
-
-        // Führe Permutationen durch, um nichtlineare Werte zu erhalten
-        for (int i = 0; i < 256; i++) {
-            int j = (i * i + 11) % 256;
-            byte temp = sBox[i];
-            sBox[i] = sBox[j];
-            sBox[j] = temp;
-        }
-
-        // Anwenden von nichtlinearen Transformationen
-        for (int i = 0; i < 256; i++) {
-            sBox[i] = (byte) (sBox[i] ^ (sBox[(i + 1) % 256] * 31) ^ (sBox[(i + 3) % 256] >> 2));
-            sBox[i] = (byte) ((sBox[i] * 197) ^ (sBox[i] >>> 5) ^ (sBox[i] * 37));
-        }
-
-        // Sicherstellen, dass alle Werte von 0 bis 255 abgedeckt sind
-        for (int i = 0; i < 256; i++) {
-            int newValue;
-            do {
-                newValue = (random.nextInt(256) ^ sBox[i]) & 0xFF;
-            } while (used[newValue]);
-            sBox[i] = (byte) newValue;
-            used[newValue] = true;
-        }
-
-        return sBox;
-    }
-
-    private static byte[] generateInverseSBox() {
-        byte[] inverseSBox = new byte[256];
-        for (int i = 0; i < 256; i++) {
-            inverseSBox[S_BOX[i] & 0xFF] = (byte) i;
-        }
-        return inverseSBox;
-    }
-
-
     private void substituteBytes(byte[] block) {
         for (int i = 0; i < block.length; i++) {
             block[i] = S_BOX[block[i] & 0xFF];
@@ -209,14 +233,6 @@ public class DavoSec256 {
         for (int i = 0; i < block.length; i++) {
             block[i] = INVERSE_S_BOX[block[i] & 0xFF];
         }
-    }
-
-    private static int[] generateStaticPermutation() {
-        int[] permutation = new int[BLOCK_SIZE];
-        for (int i = 0; i < BLOCK_SIZE; i++) {
-            permutation[i] = (i * 5 + 3) % BLOCK_SIZE; // Statische, nichtlineare Permutation
-        }
-        return permutation;
     }
 
     private void permuteBytes(byte[] block) {
@@ -277,5 +293,4 @@ public class DavoSec256 {
             block[i] ^= iv[i];
         }
     }
-
 }

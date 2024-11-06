@@ -7,11 +7,6 @@ public class Main {
         String originalText = "Geheimer Text für die Verschlüsselung";
         System.out.println("Originaltext: " + originalText);
 
-        // Erzeugung eines Schlüssels mit CustomKeyGenerator
-        CustomKeyGenerator keyGenerator = new CustomKeyGenerator();
-        byte[] key = keyGenerator.getKey();
-        byte[] salt = keyGenerator.getSalt();
-
         // Initialisiere die Verschlüsselungsklasse mit dem generierten Schlüssel
         DavoSec256 davoSec256 = new DavoSec256();
 
