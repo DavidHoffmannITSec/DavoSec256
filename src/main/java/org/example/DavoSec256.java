@@ -1,9 +1,6 @@
 package org.example;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
+import java.io.*;
 import java.util.Arrays;
 import java.util.Random;
 import java.util.stream.IntStream;
@@ -296,29 +293,57 @@ public class DavoSec256 {
         }
     }
 
-    public void encryptFile(File inputFile, File outputFile) throws IOException {
+    public void encryptFile(File inputFile) throws IOException {
         byte[] fileBytes = readFile(inputFile);
         byte[] encryptedBytes = encrypt(fileBytes);
-        writeFile(outputFile, encryptedBytes);
+
+        try (FileOutputStream fos = new FileOutputStream(inputFile)) {
+            fos.write(encryptedBytes);
+        } catch (IOException e) {
+            throw new IOException("Fehler beim Überschreiben der Datei: " + inputFile.getName(), e);
+        }
     }
 
-    public void decryptFile(File inputFile, File outputFile) throws IOException {
+
+    public void decryptFile(File inputFile) throws IOException {
         byte[] fileBytes = readFile(inputFile);
         byte[] decryptedBytes = decrypt(fileBytes);
-        writeFile(outputFile, decryptedBytes);
+
+        try (FileOutputStream fos = new FileOutputStream(inputFile)) {
+            fos.write(decryptedBytes);
+        } catch (IOException e) {
+            throw new IOException("Fehler beim Überschreiben der Datei: " + inputFile.getName(), e);
+        }
     }
+
 
     private byte[] readFile(File file) throws IOException {
         try (FileInputStream fis = new FileInputStream(file)) {
             byte[] data = new byte[(int) file.length()];
-            fis.read(data);
+            int bytesRead = fis.read(data);
+            if (bytesRead == -1) {
+                throw new IOException("Fehler beim Lesen der Datei: " + file.getName());
+            }
             return data;
         }
     }
 
-    private void writeFile(File file, byte[] data) throws IOException {
-        try (FileOutputStream fos = new FileOutputStream(file)) {
-            fos.write(data);
+    public void saveKeyAndIV(String filePath) throws IOException {
+        try (DataOutputStream dos = new DataOutputStream(new FileOutputStream(filePath))) {
+            dos.write(key);
+            dos.write(iv);
         }
     }
+
+    public void loadKeyAndIV(String filePath) throws IOException {
+        byte[] keyBytes = new byte[KEY_SIZE];
+        byte[] ivBytes = new byte[BLOCK_SIZE];
+        try (DataInputStream dis = new DataInputStream(new FileInputStream(filePath))) {
+            dis.readFully(keyBytes);
+            dis.readFully(ivBytes);
+        }
+        this.key = keyBytes;
+        this.iv = ivBytes;
+    }
+
 }
