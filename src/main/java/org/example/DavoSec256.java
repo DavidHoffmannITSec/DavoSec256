@@ -1,6 +1,8 @@
 package org.example;
 
 import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Random;
 import java.util.stream.IntStream;
@@ -10,8 +12,8 @@ public class DavoSec256 {
     private static final int BLOCK_SIZE = 16; // 128 bits
     private int baseRounds;
 
-    private byte[] key; // Schlüssel wird hier nicht sofort erstellt
-    private byte[] iv;
+    private byte[] key; // Schlüssel
+    private byte[] iv;  // Initialisierungsvektor
 
     private byte[] S_BOX;
     private byte[] INVERSE_S_BOX;
@@ -49,6 +51,9 @@ public class DavoSec256 {
         this.S_BOX = generateDynamicSBox(this.key, this.iv);
         this.INVERSE_S_BOX = generateInverseSBox(this.S_BOX);
         this.PERMUTATION = generateDynamicPermutation(this.key, this.iv);
+
+        testSBoxForCollisions(this.S_BOX);
+        testPermutationForCollisions(this.PERMUTATION);
     }
 
     private byte[] generateDynamicIV() {
@@ -58,75 +63,22 @@ public class DavoSec256 {
         return iv;
     }
 
-    public static String byteArrayToHexString(byte[] bytes) {
-        StringBuilder hexString = new StringBuilder(2 * bytes.length);
-        for (byte b : bytes) {
-            String hex = Integer.toHexString(0xFF & b);
-            if (hex.length() == 1) {
-                hexString.append('0');
-            }
-            hexString.append(hex);
+    public void saveKeyAndIV(String filePath) throws IOException {
+        try (DataOutputStream dos = new DataOutputStream(new FileOutputStream(filePath))) {
+            dos.write(key);
+            dos.write(iv);
         }
-        return hexString.toString();
     }
 
-    private static byte[] generateDynamicSBox(byte[] key, byte[] iv) {
-        byte[] sBox = new byte[256];
-        boolean[] used = new boolean[256];
-        Random random = new Random(Arrays.hashCode(key) ^ Arrays.hashCode(iv));
-
-        for (int i = 0; i < 256; i++) {
-            sBox[i] = (byte) i;
+    public void loadKeyAndIV(String filePath) throws IOException {
+        byte[] keyBytes = new byte[KEY_SIZE];
+        byte[] ivBytes = new byte[BLOCK_SIZE];
+        try (DataInputStream dis = new DataInputStream(new FileInputStream(filePath))) {
+            dis.readFully(keyBytes);
+            dis.readFully(ivBytes);
         }
-
-        for (int i = 0; i < 256; i++) {
-            int j = Math.abs(i * i + 11 + key[i % key.length]) % 256;
-            byte temp = sBox[i];
-            sBox[i] = sBox[j];
-            sBox[j] = temp;
-        }
-
-        for (int i = 0; i < 256; i++) {
-            sBox[i] = (byte) (sBox[i] ^ (sBox[Math.floorMod(i + 1, 256)] * 31) ^ (sBox[Math.floorMod(i + 3, 256)] >> 2));
-            sBox[i] = (byte) ((sBox[i] * 197) ^ (sBox[i] >>> 5) ^ (sBox[i] * 37));
-        }
-
-        for (int i = 0; i < 256; i++) {
-            int newValue;
-            do {
-                newValue = Math.floorMod(random.nextInt(256) ^ sBox[i], 256);
-            } while (used[newValue]);
-            sBox[i] = (byte) newValue;
-            used[newValue] = true;
-        }
-
-        return sBox;
-    }
-
-    private static byte[] generateInverseSBox(byte[] sBox) {
-        byte[] inverseSBox = new byte[256];
-        for (int i = 0; i < 256; i++) {
-            inverseSBox[sBox[i] & 0xFF] = (byte) i;
-        }
-        return inverseSBox;
-    }
-
-    private static int[] generateDynamicPermutation(byte[] key, byte[] iv) {
-        int[] permutation = new int[BLOCK_SIZE];
-        Random random = new Random(Arrays.hashCode(key) ^ Arrays.hashCode(iv));
-
-        for (int i = 0; i < BLOCK_SIZE; i++) {
-            permutation[i] = i;
-        }
-
-        for (int i = BLOCK_SIZE - 1; i > 0; i--) {
-            int j = random.nextInt(i + 1);
-            int temp = permutation[i];
-            permutation[i] = permutation[j];
-            permutation[j] = temp;
-        }
-
-        return permutation;
+        this.key = keyBytes;
+        this.iv = ivBytes;
     }
 
     public byte[] encrypt(byte[] plaintext) {
@@ -293,57 +245,83 @@ public class DavoSec256 {
         }
     }
 
-    public void encryptFile(File inputFile) throws IOException {
-        byte[] fileBytes = readFile(inputFile);
-        byte[] encryptedBytes = encrypt(fileBytes);
-
-        try (FileOutputStream fos = new FileOutputStream(inputFile)) {
-            fos.write(encryptedBytes);
-        } catch (IOException e) {
-            throw new IOException("Fehler beim Überschreiben der Datei: " + inputFile.getName(), e);
-        }
-    }
-
-
-    public void decryptFile(File inputFile) throws IOException {
-        byte[] fileBytes = readFile(inputFile);
-        byte[] decryptedBytes = decrypt(fileBytes);
-
-        try (FileOutputStream fos = new FileOutputStream(inputFile)) {
-            fos.write(decryptedBytes);
-        } catch (IOException e) {
-            throw new IOException("Fehler beim Überschreiben der Datei: " + inputFile.getName(), e);
-        }
-    }
-
-
-    private byte[] readFile(File file) throws IOException {
-        try (FileInputStream fis = new FileInputStream(file)) {
-            byte[] data = new byte[(int) file.length()];
-            int bytesRead = fis.read(data);
-            if (bytesRead == -1) {
-                throw new IOException("Fehler beim Lesen der Datei: " + file.getName());
+    private void testSBoxForCollisions(byte[] sBox) {
+        boolean[] seen = new boolean[256];
+        for (byte value : sBox) {
+            int idx = value & 0xFF;
+            if (seen[idx]) {
+                throw new IllegalStateException("Kollision in der S-Box festgestellt!");
             }
-            return data;
+            seen[idx] = true;
         }
     }
 
-    public void saveKeyAndIV(String filePath) throws IOException {
-        try (DataOutputStream dos = new DataOutputStream(new FileOutputStream(filePath))) {
-            dos.write(key);
-            dos.write(iv);
+    private void testPermutationForCollisions(int[] permutation) {
+        boolean[] seen = new boolean[BLOCK_SIZE];
+        for (int value : permutation) {
+            if (value < 0 || value >= BLOCK_SIZE || seen[value]) {
+                throw new IllegalStateException("Kollision in der Permutationsmatrix festgestellt!");
+            }
+            seen[value] = true;
         }
     }
 
-    public void loadKeyAndIV(String filePath) throws IOException {
-        byte[] keyBytes = new byte[KEY_SIZE];
-        byte[] ivBytes = new byte[BLOCK_SIZE];
-        try (DataInputStream dis = new DataInputStream(new FileInputStream(filePath))) {
-            dis.readFully(keyBytes);
-            dis.readFully(ivBytes);
+    private byte[] generateDynamicSBox(byte[] key, byte[] iv) {
+        byte[] sBox = new byte[256];
+        boolean[] used = new boolean[256];
+        Random random = new Random(Arrays.hashCode(key) ^ Arrays.hashCode(iv));
+
+        for (int i = 0; i < 256; i++) {
+            sBox[i] = (byte) i;
         }
-        this.key = keyBytes;
-        this.iv = ivBytes;
+
+        for (int i = 0; i < 256; i++) {
+            int j = Math.abs(i * i + 11 + key[i % key.length]) % 256;
+            byte temp = sBox[i];
+            sBox[i] = sBox[j];
+            sBox[j] = temp;
+        }
+
+        for (int i = 0; i < 256; i++) {
+            sBox[i] = (byte) (sBox[i] ^ (sBox[Math.floorMod(i + 1, 256)] * 31) ^ (sBox[Math.floorMod(i + 3, 256)] >> 2));
+            sBox[i] = (byte) ((sBox[i] * 197) ^ (sBox[i] >>> 5) ^ (sBox[i] * 37));
+        }
+
+        for (int i = 0; i < 256; i++) {
+            int newValue;
+            do {
+                newValue = Math.floorMod(random.nextInt(256) ^ sBox[i], 256);
+            } while (used[newValue]);
+            sBox[i] = (byte) newValue;
+            used[newValue] = true;
+        }
+
+        return sBox;
     }
 
+    private byte[] generateInverseSBox(byte[] sBox) {
+        byte[] inverseSBox = new byte[256];
+        for (int i = 0; i < 256; i++) {
+            inverseSBox[sBox[i] & 0xFF] = (byte) i;
+        }
+        return inverseSBox;
+    }
+
+    private int[] generateDynamicPermutation(byte[] key, byte[] iv) {
+        int[] permutation = new int[BLOCK_SIZE];
+        Random random = new Random(Arrays.hashCode(key) ^ Arrays.hashCode(iv));
+
+        for (int i = 0; i < BLOCK_SIZE; i++) {
+            permutation[i] = i;
+        }
+
+        for (int i = BLOCK_SIZE - 1; i > 0; i--) {
+            int j = random.nextInt(i + 1);
+            int temp = permutation[i];
+            permutation[i] = permutation[j];
+            permutation[j] = temp;
+        }
+
+        return permutation;
+    }
 }
