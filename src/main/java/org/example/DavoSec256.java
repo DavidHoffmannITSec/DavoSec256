@@ -38,7 +38,7 @@ public class DavoSec256 {
         CustomKeyGenerator keyGenerator = new CustomKeyGenerator();
         this.key = keyGenerator.getKey(); // Dynamisch generierter Schlüssel
         this.iv = generateDynamicIV(); // Dynamisch generierter Initialisierungsvektor
-        this.baseRounds = DEFAULT_BASE_ROUNDS;
+        this.baseRounds = DEFAULT_BASE_ROUNDS + new Random().nextInt(5); // Dynamische Rundenzahl
 
         // Dynamische Generierung der S-Box und Permutation basierend auf Schlüssel und IV
         this.S_BOX = generateDynamicSBox(this.key, this.iv);
@@ -48,8 +48,7 @@ public class DavoSec256 {
 
     private byte[] generateDynamicIV() {
         byte[] iv = new byte[BLOCK_SIZE];
-        long seed = System.currentTimeMillis() ^ System.nanoTime();
-        Random random = new Random(seed);
+        Random random = new Random(Arrays.hashCode(key) ^ System.nanoTime() ^ Runtime.getRuntime().freeMemory());
         random.nextBytes(iv);
         return iv;
     }
@@ -78,7 +77,7 @@ public class DavoSec256 {
 
         // Nichtlineare Transformation basierend auf Schlüssel und IV
         for (int i = 0; i < 256; i++) {
-            int j = Math.floorMod(i * i + 11 + key[i % key.length], 256);
+            int j = Math.abs(i * i + 11 + key[i % key.length]) % 256;
             byte temp = sBox[i];
             sBox[i] = sBox[j];
             sBox[j] = temp;
@@ -101,7 +100,6 @@ public class DavoSec256 {
 
         return sBox;
     }
-
 
     private static byte[] generateInverseSBox(byte[] sBox) {
         byte[] inverseSBox = new byte[256];
