@@ -91,9 +91,6 @@ public class CustomKeyGenerator {
                     int memoryIndex = Math.abs((i * 17 + round) % MEMORY_SIZE);
                     int alternateIndex = Math.abs((i * 31 + round) % MEMORY_SIZE);
 
-                    // Debugging-Ausgaben zur Diagnose
-                    System.out.println("Round: " + round + ", i: " + i + ", memoryIndex: " + memoryIndex + ", alternateIndex: " + alternateIndex);
-
                     memoryArray[memoryIndex] ^= key[i];
                     key[i] ^= memoryArray[alternateIndex];
                     dynamicSalt[i % dynamicSalt.length] ^= key[i];

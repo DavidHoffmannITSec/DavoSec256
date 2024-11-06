@@ -15,7 +15,7 @@ public class Main
         byte[] salt = keyGenerator.getSalt();
 
         // Initialisiere die Verschlüsselungsklasse mit dem generierten Schlüssel
-        DavoSec256 davoSec256 = new DavoSec256(key);
+        DavoSec256 davoSec256 = new DavoSec256();
 
         // Text in Bytes umwandeln und verschlüsseln
         byte[] plaintextBytes = originalText.getBytes(StandardCharsets.UTF_8);
