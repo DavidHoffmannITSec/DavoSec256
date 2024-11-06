@@ -1,8 +1,6 @@
 package org.example;
 
 import java.io.*;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Random;
 import java.util.stream.IntStream;
@@ -324,4 +322,13 @@ public class DavoSec256 {
 
         return permutation;
     }
+
+    public String bytesToHex(byte[] bytes) {
+        StringBuilder sb = new StringBuilder();
+        for (byte b : bytes) {
+            sb.append(String.format("%02x", b));
+        }
+        return sb.toString();
+    }
+
 }

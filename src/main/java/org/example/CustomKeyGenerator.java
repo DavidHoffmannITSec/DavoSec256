@@ -56,9 +56,13 @@ public class CustomKeyGenerator {
         return seedBuilder.toString();
     }
 
+
     private byte[] generateStrongSalt() {
         byte[] salt = new byte[SALT_SIZE];
         long entropySeed = 0xDEADBEEF5678L ^ System.currentTimeMillis();
+
+        int memoryFactor = (int) (Runtime.getRuntime().maxMemory() / (1024 * 1024));
+        Random random = new Random(entropySeed ^ memoryFactor); // zusätzlicher Entropiefaktor
 
         for (int i = 0; i < SALT_SIZE; i++) {
             entropySeed ^= (entropySeed << 13) ^ (entropySeed >> 7) ^ i;
@@ -115,7 +119,10 @@ public class CustomKeyGenerator {
     }
 
     private void simulateDelay() {
-        int nopCount = customRandom((int) System.nanoTime()) % (delayMs * 100); // Skalierung der NOPs basierend auf delayMs
+        int baseDelay = delayMs * 100;
+        int randomFactor = customRandom((int) System.nanoTime() % 256) % 10; // kontrollierte Zufallskomponente
+        int nopCount = baseDelay + randomFactor;
+
         for (int i = 0; i < nopCount; i++) {
             int dummy = i * customRandom(i);
         }
