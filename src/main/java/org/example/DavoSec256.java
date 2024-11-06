@@ -42,9 +42,10 @@ public class DavoSec256 {
     }
 
     public void generateKey() {
+        this.ckg = new CustomKeyGenerator();
         this.key = ckg.getKey();
         this.iv = generateDynamicIV();
-        int dataLength = this.key.length; // Automatische Berechnung der Datenlänge
+        int dataLength = this.key.length;
         this.baseRounds = 18 + (key.length % 5) + (dataLength / BLOCK_SIZE);
         this.S_BOX = generateDynamicSBox(this.key, this.iv);
         this.INVERSE_S_BOX = generateInverseSBox(this.S_BOX);
@@ -317,20 +318,11 @@ public class DavoSec256 {
         return S_BOX;
     }
 
-    public byte[] getIv()
-    {
-        return iv;
-    }
-
     public byte[] getKey()
     {
         return key;
     }
 
-    public byte[] getINVERSE_S_BOX()
-    {
-        return INVERSE_S_BOX;
-    }
 
     public int[] getPERMUTATION()
     {

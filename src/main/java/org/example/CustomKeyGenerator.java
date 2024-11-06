@@ -44,17 +44,16 @@ public class CustomKeyGenerator {
     }
 
     private String generateComplexSeed() {
-        long timeSeed = System.nanoTime();
-        long memorySeed = Runtime.getRuntime().freeMemory();
-        long combinedSeed = timeSeed ^ memorySeed ^ System.currentTimeMillis();
+        long seedBase = System.nanoTime() ^ System.currentTimeMillis() ^ 0xCAFEBABE1234L;
+        seedBase ^= ((long) System.identityHashCode(this) * 31) ^ System.nanoTime(); // Casting zu long
         StringBuilder seedBuilder = new StringBuilder();
 
-        Random random = new Random(combinedSeed);
+        Random random = new Random(seedBase);  // Verwende den dynamischeren seedBase
         for (int i = 0; i < 32; i++) {
-            combinedSeed ^= (combinedSeed << 7) ^ (combinedSeed >> 5) ^ i;
-            int nextChar = (int) ((combinedSeed & 0xFF) ^ random.nextInt(256));
+            seedBase ^= (seedBase << 7) ^ (seedBase >> 5) ^ i;
+            int nextChar = (int) ((seedBase & 0xFF) ^ random.nextInt(256));
             seedBuilder.append((char) (nextChar & 0xFF));
-            combinedSeed ^= seedBuilder.charAt(i) * 37;
+            seedBase ^= seedBuilder.charAt(i) * 37;
         }
         return seedBuilder.toString();
     }
@@ -63,20 +62,24 @@ public class CustomKeyGenerator {
 
     private byte[] generateStrongSalt() {
         byte[] salt = new byte[SALT_SIZE];
-        long entropySeed = 0xDEADBEEF5678L ^ System.currentTimeMillis();
-
-        int memoryFactor = (int) (Runtime.getRuntime().maxMemory() / (1024 * 1024));
-        Random random = new Random(entropySeed ^ memoryFactor); // zusätzlicher Entropiefaktor
+        long entropySeed = System.nanoTime() ^ System.currentTimeMillis() ^ ((long) System.identityHashCode(this) * 31); // Explizites Casten zu long
+        Random random = new Random(entropySeed);
 
         for (int i = 0; i < SALT_SIZE; i++) {
             entropySeed ^= (entropySeed << 13) ^ (entropySeed >> 7) ^ i;
             salt[i] = (byte) (entropySeed & 0xFF);
+
+            // Verwendet Random für zusätzliche Entropie
+            salt[i] ^= (byte) random.nextInt(256);
+
             salt[i] ^= rotateLeft(salt[i], i % 8);
             salt[i] ^= hashByte((byte) entropySeed, i);
-            entropySeed ^= salt[i] * 31;
+            entropySeed ^= (salt[i] * 31);
         }
         return salt;
     }
+
+
 
     private byte[] generateKey(String seed, byte[] salt) {
         byte[] key = new byte[KEY_SIZE];
