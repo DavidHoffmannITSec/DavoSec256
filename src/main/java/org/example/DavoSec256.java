@@ -158,7 +158,7 @@ public class DavoSec256 {
 
     private byte[] encryptBlock(byte[] block) {
         byte[] workingBlock = Arrays.copyOf(block, block.length);
-        int adjustedRounds = baseRounds + 2;
+        int adjustedRounds = baseRounds + 5;
 
         for (int round = 0; round < adjustedRounds; round++) {
             addRoundKey(workingBlock, round);
@@ -172,7 +172,7 @@ public class DavoSec256 {
 
     private byte[] decryptBlock(byte[] block) {
         byte[] workingBlock = Arrays.copyOf(block, block.length);
-        int adjustedRounds = baseRounds + 2; // Konsistente Rundenzahl wie bei `encryptBlock`
+        int adjustedRounds = baseRounds + 5; // Konsistente Rundenzahl wie bei `encryptBlock`
 
         for (int round = adjustedRounds - 1; round >= 0; round--) {
             reverseMixColumns(workingBlock);
@@ -185,9 +185,7 @@ public class DavoSec256 {
 
 
     private void addRoundKey(byte[] block, int round) {
-        IntStream.range(0, BLOCK_SIZE).parallel().forEach(i -> {
-            block[i] ^= key[(i + round) % KEY_SIZE];
-        });
+        IntStream.range(0, BLOCK_SIZE).parallel().forEach(i -> block[i] ^= key[(i + round) % KEY_SIZE]);
     }
 
     private void performTimingConsistentNOP() {
@@ -207,13 +205,19 @@ public class DavoSec256 {
     }
 
     private void fixedTimeBlockProcessing(byte[] block) {
-        long targetTimeNs = 1_200_000; // Zielzeit ca. 1.2 ms
+        long targetTimeNs = 1_200_000; // Zielzeit in Nanosekunden
 
         long startTime = System.nanoTime();
-        encryptBlock(block);
+        encryptBlock(block); // Die eigentliche Blockverschlüsselung
 
         while (System.nanoTime() - startTime < targetTimeNs) {
-            performTimingConsistentNOP(); // Erhält konstante Zeit ohne Busy-Wait
+            dummyOperation();
+        }
+    }
+
+    private void dummyOperation() {
+        for (int i = 0; i < 1000; i++) {
+            int dummySum = (i * 31) ^ (i << 3);
         }
     }
 
