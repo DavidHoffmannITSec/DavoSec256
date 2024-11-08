@@ -33,7 +33,7 @@ public class DavoSecTest {
         davoSec.generateKey();
 
         long averageDuration = 0;
-        int trials = 100;
+        int trials = 1000;
 
         for (int i = 0; i < trials; i++) {
             long startTime = System.nanoTime();
@@ -48,9 +48,11 @@ public class DavoSecTest {
             davoSec.encrypt(plaintext);
             long duration = System.nanoTime() - startTime;
             double timingDifference = Math.abs(duration - averageDuration) / (double) averageDuration;
-            assertTrue(timingDifference < 0.1, "Der Timing-Unterschied sollte weniger als 5% betragen.");
+            assertTrue(timingDifference < 0.1, "Der Timing-Unterschied sollte weniger als 10% betragen."); // Erhöhte Toleranz auf 10%
         }
     }
+
+
 
     @Test
     public void testAvalancheEffect() {

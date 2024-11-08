@@ -329,5 +329,11 @@ public class DavoSec256 {
         return PERMUTATION;
     }
 
+    public byte[] getSalt(){
+        return ckg.getSalt();
+    }
 
+    public String getSeed(){
+        return ckg.getSeed();
+    }
 }
