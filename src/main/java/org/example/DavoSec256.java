@@ -3,6 +3,7 @@ package org.example;
 import java.io.*;
 import java.util.Arrays;
 import java.util.Random;
+import java.util.stream.IntStream;
 
 public class DavoSec256 {
     private static final int KEY_SIZE = 32; // 256 bits
@@ -61,7 +62,6 @@ public class DavoSec256 {
         return iv;
     }
 
-
     public void saveKeyAndIV(String filePath) throws IOException {
         try (DataOutputStream dos = new DataOutputStream(new FileOutputStream(filePath))) {
             dos.write(key);
@@ -97,7 +97,7 @@ public class DavoSec256 {
             System.arraycopy(encryptedBlock, 0, ciphertext, i, BLOCK_SIZE);
             currentIV = encryptedBlock;
 
-            // Dummy-Operationen in der Verschlüsselungsschleife für Stabilität
+            // Dummy-Operationen für Stabilität
             performTimingConsistentNOP();
         }
 
@@ -158,7 +158,7 @@ public class DavoSec256 {
 
     private byte[] encryptBlock(byte[] block) {
         byte[] workingBlock = Arrays.copyOf(block, block.length);
-        int adjustedRounds = baseRounds + 2; // Zwei zusätzliche Runden
+        int adjustedRounds = baseRounds + 2;
 
         for (int round = 0; round < adjustedRounds; round++) {
             addRoundKey(workingBlock, round);
@@ -185,47 +185,35 @@ public class DavoSec256 {
 
 
     private void addRoundKey(byte[] block, int round) {
-        for (int i = 0; i < BLOCK_SIZE; i++) {
+        IntStream.range(0, BLOCK_SIZE).parallel().forEach(i -> {
             block[i] ^= key[(i + round) % KEY_SIZE];
-        }
-        performTimingConsistentNOP();
+        });
     }
 
     private void performTimingConsistentNOP() {
-        int nopCount = 1500; // Erhöhte Anzahl an Operationen
         int dummySum = 0;
-
-        for (int i = 0; i < nopCount; i++) {
-            dummySum += (i * 41) ^ (i >> 3) ^ (i << 2); // Variablere Dummy-Operationen
-            dummySum ^= (dummySum << 5) ^ (dummySum >> 3); // Erhöhte Komplexität
+        for (int i = 0; i < 1000; i++) {
+            dummySum += i * 37;
+            dummySum ^= (dummySum << 5) ^ (dummySum >> 3);
         }
 
-        // Verhindert Optimierung durch den Compiler
         if (dummySum == Integer.MAX_VALUE) {
             System.out.println("Timing consistency check");
         }
     }
-
-
 
     private void reverseAddRoundKey(byte[] block, int round) {
         addRoundKey(block, round);
     }
 
     private void fixedTimeBlockProcessing(byte[] block) {
-        long targetTimeNs = 1_200_000; // Zielzeit leicht erhöhen auf ca. 1.2 ms
+        long targetTimeNs = 1_200_000; // Zielzeit ca. 1.2 ms
 
         long startTime = System.nanoTime();
-        encryptBlock(block); // Die eigentliche Blockverschlüsselung
+        encryptBlock(block);
 
-        busyWait(targetTimeNs - (System.nanoTime() - startTime));
-    }
-
-
-    private void busyWait(long durationNs) {
-        long start = System.nanoTime();
-        while (System.nanoTime() - start < durationNs) {
-            // Leerlaufschleife, die konstant Zeit verbraucht
+        while (System.nanoTime() - startTime < targetTimeNs) {
+            performTimingConsistentNOP(); // Erhält konstante Zeit ohne Busy-Wait
         }
     }
 
