@@ -92,11 +92,16 @@ public class DavoSec256 {
         for (int i = 0; i < paddedPlaintext.length; i += BLOCK_SIZE) {
             byte[] plaintextBlock = Arrays.copyOfRange(paddedPlaintext, i, i + BLOCK_SIZE);
             xorWithIV(plaintextBlock, currentIV);
+            fixedTimeBlockProcessing(plaintextBlock);
             byte[] encryptedBlock = encryptBlock(plaintextBlock);
             System.arraycopy(encryptedBlock, 0, ciphertext, i, BLOCK_SIZE);
             currentIV = encryptedBlock;
+
+            // Dummy-Operationen in der Verschlüsselungsschleife für Stabilität
+            performTimingConsistentNOP();
         }
 
+        ensureTimingConsistency();
         return ciphertext;
     }
 
@@ -110,14 +115,23 @@ public class DavoSec256 {
 
         for (int i = 0; i < ciphertext.length; i += BLOCK_SIZE) {
             byte[] ciphertextBlock = Arrays.copyOfRange(ciphertext, i, i + BLOCK_SIZE);
+
+            // Konsistente Blockverarbeitungszeit in der Entschlüsselungsschleife
+            fixedTimeBlockProcessing(ciphertextBlock);
+
             byte[] decryptedBlock = decryptBlock(ciphertextBlock);
             xorWithIV(decryptedBlock, currentIV);
             System.arraycopy(decryptedBlock, 0, decryptedText, i, BLOCK_SIZE);
             currentIV = ciphertextBlock;
+
+            // Dummy-Operationen für Timing-Konsistenz in der Entschlüsselungsschleife
+            performTimingConsistentNOP();
         }
 
+        ensureTimingConsistency();
         return removePadding(decryptedText);
     }
+
 
     private byte[] pad(byte[] data) {
         int paddingLength = BLOCK_SIZE - (data.length % BLOCK_SIZE);
@@ -144,7 +158,9 @@ public class DavoSec256 {
 
     private byte[] encryptBlock(byte[] block) {
         byte[] workingBlock = Arrays.copyOf(block, block.length);
-        for (int round = 0; round < baseRounds; round++) {
+        int adjustedRounds = baseRounds + 2; // Zwei zusätzliche Runden
+
+        for (int round = 0; round < adjustedRounds; round++) {
             addRoundKey(workingBlock, round);
             substituteBytes(workingBlock);
             permuteBytes(workingBlock);
@@ -153,9 +169,12 @@ public class DavoSec256 {
         return workingBlock;
     }
 
+
     private byte[] decryptBlock(byte[] block) {
         byte[] workingBlock = Arrays.copyOf(block, block.length);
-        for (int round = baseRounds - 1; round >= 0; round--) {
+        int adjustedRounds = baseRounds + 2; // Konsistente Rundenzahl wie bei `encryptBlock`
+
+        for (int round = adjustedRounds - 1; round >= 0; round--) {
             reverseMixColumns(workingBlock);
             reversePermuteBytes(workingBlock);
             reverseSubstituteBytes(workingBlock);
@@ -163,6 +182,7 @@ public class DavoSec256 {
         }
         return workingBlock;
     }
+
 
     private void addRoundKey(byte[] block, int round) {
         for (int i = 0; i < BLOCK_SIZE; i++) {
@@ -172,11 +192,12 @@ public class DavoSec256 {
     }
 
     private void performTimingConsistentNOP() {
-        int nopCount = 500; // Konstante Anzahl an Operationen
-        int dummySum = 0;   // Dummy-Summe zur Konsistenz
+        int nopCount = 1500; // Erhöhte Anzahl an Operationen
+        int dummySum = 0;
 
         for (int i = 0; i < nopCount; i++) {
-            dummySum += (i * 31) ^ (i >> 3); // Beispieloperation
+            dummySum += (i * 41) ^ (i >> 3) ^ (i << 2); // Variablere Dummy-Operationen
+            dummySum ^= (dummySum << 5) ^ (dummySum >> 3); // Erhöhte Komplexität
         }
 
         // Verhindert Optimierung durch den Compiler
@@ -186,15 +207,41 @@ public class DavoSec256 {
     }
 
 
+
     private void reverseAddRoundKey(byte[] block, int round) {
         addRoundKey(block, round);
     }
 
-    private void substituteBytes(byte[] block) {
-        for (int i = 0; i < block.length; i++) {
-            block[i] = S_BOX[block[i] & 0xFF];
+    private void fixedTimeBlockProcessing(byte[] block) {
+        long targetTimeNs = 1_200_000; // Zielzeit leicht erhöhen auf ca. 1.2 ms
+
+        long startTime = System.nanoTime();
+        encryptBlock(block); // Die eigentliche Blockverschlüsselung
+
+        busyWait(targetTimeNs - (System.nanoTime() - startTime));
+    }
+
+
+    private void busyWait(long durationNs) {
+        long start = System.nanoTime();
+        while (System.nanoTime() - start < durationNs) {
+            // Leerlaufschleife, die konstant Zeit verbraucht
         }
     }
+
+
+    private void substituteBytes(byte[] block) {
+        int dummySum = 0; // Dummy-Wert zur Konsistenz
+        for (int i = 0; i < block.length; i++) {
+            block[i] = S_BOX[block[i] & 0xFF];
+            dummySum += block[i]; // Dummy-Berechnung für Konsistenz
+        }
+
+        if (dummySum == Integer.MAX_VALUE) {
+            System.out.println("Dummy operation in substituteBytes");
+        }
+    }
+
 
     private void reverseSubstituteBytes(byte[] block) {
         for (int i = 0; i < block.length; i++) {
@@ -204,11 +251,29 @@ public class DavoSec256 {
 
     private void permuteBytes(byte[] block) {
         byte[] permuted = new byte[BLOCK_SIZE];
+        int dummySum = 0; // Dummy-Wert zur Konsistenz
         for (int i = 0; i < BLOCK_SIZE; i++) {
             permuted[i] = block[PERMUTATION[i]];
+            dummySum += permuted[i]; // Dummy-Berechnung für Konsistenz
         }
         System.arraycopy(permuted, 0, block, 0, BLOCK_SIZE);
+
+        if (dummySum == Integer.MAX_VALUE) {
+            System.out.println("Dummy operation in permuteBytes");
+        }
     }
+
+    private void ensureTimingConsistency() {
+        int dummyResult = 0;
+        for (int i = 0; i < 1000; i++) {
+            dummyResult += (i * i) ^ (i << 3);
+        }
+
+        if (dummyResult == Integer.MAX_VALUE) {
+            System.out.println("Timing consistency check");
+        }
+    }
+
 
     private void reversePermuteBytes(byte[] block) {
         byte[] reversed = new byte[BLOCK_SIZE];
