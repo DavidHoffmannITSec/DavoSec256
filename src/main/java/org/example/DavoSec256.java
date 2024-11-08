@@ -3,7 +3,6 @@ package org.example;
 import java.io.*;
 import java.util.Arrays;
 import java.util.Random;
-import java.util.stream.IntStream;
 
 public class DavoSec256 {
     private static final int KEY_SIZE = 32; // 256 bits
@@ -166,8 +165,26 @@ public class DavoSec256 {
     }
 
     private void addRoundKey(byte[] block, int round) {
-        IntStream.range(0, BLOCK_SIZE).parallel().forEach(i -> block[i] ^= key[(i + round) % KEY_SIZE]);
+        for (int i = 0; i < BLOCK_SIZE; i++) {
+            block[i] ^= key[(i + round) % KEY_SIZE];
+        }
+        performTimingConsistentNOP();
     }
+
+    private void performTimingConsistentNOP() {
+        int nopCount = 500; // Konstante Anzahl an Operationen
+        int dummySum = 0;   // Dummy-Summe zur Konsistenz
+
+        for (int i = 0; i < nopCount; i++) {
+            dummySum += (i * 31) ^ (i >> 3); // Beispieloperation
+        }
+
+        // Verhindert Optimierung durch den Compiler
+        if (dummySum == Integer.MAX_VALUE) {
+            System.out.println("Timing consistency check");
+        }
+    }
+
 
     private void reverseAddRoundKey(byte[] block, int round) {
         addRoundKey(block, round);
