@@ -78,7 +78,12 @@ public class DavoSec256 {
         }
         this.key = keyBytes;
         this.iv = ivBytes;
+
+        this.S_BOX = generateDynamicSBox(this.key, this.iv);
+        this.INVERSE_S_BOX = generateInverseSBox(this.S_BOX);
+        this.PERMUTATION = generateDynamicPermutation(this.key, this.iv);
     }
+
 
     public byte[] encrypt(byte[] plaintext) {
         if (plaintext.length == 0) {

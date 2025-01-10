@@ -6,31 +6,39 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 
-public class Main {
+public class Main
+{
     private static final String keyPath = "C:/Users/PC/Documents/keyAndIV.dat"; // Speicherort für Schlüssel und IV
     private static final String filePath = "C:/Users/PC/Documents/hashtest.txt"; // Pfad zur unverschlüsselten Datei
     private static final DavoSec256 davoSec256 = new DavoSec256();
 
-    public static void main(String[] args) {
+    public static void main(String[] args)
+    {
 
-        try {
-            // Schlüssel und IV laden oder generieren
-            //loadOrGenerateKeyAndIV();
-            davoSec256.generateKey();
+        try
+        {
+            loadOrGenerateKeyAndIV();
+
+            //davoSec256.generateKey();
             encryptAndDecryptText();
 
-           // encryptFile();
-           //decryptFile();
+            //encryptFile();
+            //decryptFile();
 
 
-        }/* catch (IOException e) {
+        }
+        catch (IOException e)
+        {
             System.err.println("Fehler bei der Dateioperation: " + e.getMessage());
-        }*/ catch (IllegalArgumentException e) {
+        }
+        catch (IllegalArgumentException e)
+        {
             System.err.println("Fehler bei der Verschlüsselung/Entschlüsselung: " + e.getMessage());
         }
     }
 
-    private static void encryptAndDecryptText() {
+    private static void encryptAndDecryptText()
+    {
         String originalText = "Dies ist ein Teststring für die Verschlüsselung.";
         System.out.println("\nOriginal-String: " + originalText);
 
@@ -42,47 +50,61 @@ public class Main {
         System.out.println("Entschlüsselter String: " + decryptedText);
     }
 
-    private static void encryptFile() {
+    private static void encryptFile()
+    {
         File inputFile = new File(filePath);
 
-        if (!inputFile.exists() || inputFile.length() == 0) {
+        if (!inputFile.exists() || inputFile.length() == 0)
+        {
             System.err.println("Die Datei existiert nicht oder ist leer: " + inputFile.getAbsolutePath());
             return;
         }
 
-        try {
+        try
+        {
             byte[] fileContent = Files.readAllBytes(inputFile.toPath());
             byte[] encryptedContent = davoSec256.encrypt(fileContent);
             Files.write(inputFile.toPath(), encryptedContent);
             System.out.println("Datei erfolgreich verschlüsselt: " + inputFile.getAbsolutePath());
-        } catch (IOException e) {
+        }
+        catch (IOException e)
+        {
             System.err.println("Fehler bei der Dateioperation: " + e.getMessage());
         }
     }
 
-    private static void decryptFile() {
+    private static void decryptFile()
+    {
         File inputFile = new File(filePath);
 
-        if (!inputFile.exists() || inputFile.length() == 0) {
+        if (!inputFile.exists() || inputFile.length() == 0)
+        {
             System.err.println("Die Datei existiert nicht oder ist leer: " + inputFile.getAbsolutePath());
             return;
         }
 
-        try {
+        try
+        {
             byte[] fileContent = Files.readAllBytes(inputFile.toPath());
             byte[] decryptedContent = davoSec256.decrypt(fileContent);
             Files.write(inputFile.toPath(), decryptedContent);
             System.out.println("Datei erfolgreich entschlüsselt: " + inputFile.getAbsolutePath());
-        } catch (IOException e) {
+        }
+        catch (IOException e)
+        {
             System.err.println("Fehler bei der Dateioperation: " + e.getMessage());
         }
     }
 
-    private static void loadOrGenerateKeyAndIV() throws IOException {
-        if (Files.exists(Paths.get(keyPath))) {
+    private static void loadOrGenerateKeyAndIV() throws IOException
+    {
+        if (Files.exists(Paths.get(keyPath)))
+        {
             davoSec256.loadKeyAndIV(keyPath);
             System.out.println("Schlüssel und IV erfolgreich geladen.");
-        } else {
+        }
+        else
+        {
             davoSec256.generateKey();
             davoSec256.saveKeyAndIV(keyPath);
             System.out.println("Neuer Schlüssel und IV generiert und gespeichert.");
